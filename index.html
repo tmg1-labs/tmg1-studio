@@ -21,10 +21,24 @@
 
     <main class="workspace">
       <section class="preview-pane">
-        <h2>プレビュー（monob 出力）</h2>
+        <div class="pane-head">
+          <h2>プレビュー（monob 出力）</h2>
+          <label class="zoom-ctrl">
+            表示
+            <select id="zoom">
+              <option value="window">ウィンドウに合わせる</option>
+              <option value="25">25%</option>
+              <option value="50">50%</option>
+              <option value="100">100%</option>
+              <option value="200">200%</option>
+              <option value="300">300%</option>
+              <option value="400">400%</option>
+            </select>
+          </label>
+        </div>
         <div class="preview-frame">
           <img id="preview-img" alt="preview" />
-          <p id="preview-placeholder" class="placeholder">動画を読み込むとここに 1bit プレビューが出ますにゃ</p>
+          <p id="preview-placeholder" class="placeholder">動画を読み込むと、ここに 1bit プレビューが表示されます</p>
         </div>
         <p id="preview-meta" class="meta"></p>
       </section>

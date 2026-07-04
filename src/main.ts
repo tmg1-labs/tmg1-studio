@@ -61,6 +61,7 @@ const outFps = $("out-fps") as HTMLInputElement;
 const previewImg = $("preview-img") as HTMLImageElement;
 const previewPlaceholder = $("preview-placeholder");
 const previewMeta = $("preview-meta");
+const zoomEl = $("zoom") as HTMLSelectElement;
 const segLabel = $("seg-label");
 const contrastEl = $("contrast") as HTMLInputElement;
 const loEl = $("level-lo") as HTMLInputElement;
@@ -253,7 +254,7 @@ splitBtn.addEventListener("click", () => {
   const seg = state.segments[idx];
   const t = state.playhead;
   if (t <= seg.start_sec + 0.05 || t >= seg.end_sec - 0.05) {
-    setStatus("区間の端すぎるため分割できませんにゃ", true);
+    setStatus("区間の端に近すぎるため分割できません", true);
     return;
   }
   const right = makeSegment(t, seg.end_sec, seg);
@@ -266,7 +267,7 @@ splitBtn.addEventListener("click", () => {
 
 deleteBtn.addEventListener("click", () => {
   if (state.segments.length <= 1) {
-    setStatus("区間が1つのため削除できませんにゃ", true);
+    setStatus("区間が1つのため削除できません", true);
     return;
   }
   const idx = currentIndex();
@@ -373,6 +374,7 @@ async function runPreview() {
     if (seq !== previewSeq) return; // 古い結果は破棄
     previewImg.src = dataUrl;
     previewImg.style.display = "block";
+    applyZoom();
     previewMeta.textContent = `${w}x${h}  @ ${fmtTime(state.playhead)}  dither=${seg.dither}  contrast=${seg.contrast.toFixed(
       2,
     )}  level=[${seg.level_lo},${seg.level_hi}]`;
@@ -380,6 +382,31 @@ async function runPreview() {
     if (seq === previewSeq) setStatus(String(e), true);
   }
 }
+
+// ---- 表示ズーム ----
+// window=フレームに合わせる、それ以外は出力ピクセルに対する倍率（近傍拡大で等倍表示）。
+function applyZoom() {
+  if (previewImg.style.display === "none") return;
+  const mode = zoomEl.value;
+  if (mode === "window") {
+    // フレームいっぱいに拡大/縮小して収める（アスペクト比維持）。
+    // max-width だけだと小さい画像は拡大されないため object-fit: contain を使う。
+    previewImg.style.maxWidth = "none";
+    previewImg.style.maxHeight = "none";
+    previewImg.style.width = "100%";
+    previewImg.style.height = "100%";
+    previewImg.style.objectFit = "contain";
+  } else {
+    const z = Number(mode) / 100;
+    previewImg.style.objectFit = "fill";
+    previewImg.style.maxWidth = "none";
+    previewImg.style.maxHeight = "none";
+    previewImg.style.width = `${Math.round(Number(outW.value) * z)}px`;
+    previewImg.style.height = `${Math.round(Number(outH.value) * z)}px`;
+  }
+}
+
+zoomEl.addEventListener("change", applyZoom);
 
 // ---- エクスポート ----
 exportBtn.addEventListener("click", doExport);
@@ -434,4 +461,4 @@ listen<{ done: number; total: number }>("export-progress", (ev) => {
 
 // ---- 初期化 ----
 openBtn.addEventListener("click", openVideo);
-setStatus("「動画を開く」から始めてくださいにゃ");
+setStatus("「動画を開く」から始めてください");

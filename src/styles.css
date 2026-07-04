@@ -90,23 +90,43 @@ h2 {
   flex-direction: column;
 }
 
-.preview-frame {
-  flex: 1;
+.pane-head {
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  margin-bottom: 0.6rem;
+}
+
+.pane-head h2 {
+  margin: 0;
+}
+
+.zoom-ctrl {
+  font-size: 0.8rem;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.preview-frame {
+  flex: 1;
+  /* safe center: 画像がフレームより大きいときは中央寄せをやめてスクロール可能にする */
+  display: flex;
+  align-items: safe center;
+  justify-content: safe center;
   background: #000;
   border-radius: 6px;
-  overflow: hidden;
+  overflow: auto;
   min-height: 0;
   position: relative;
 }
 
 #preview-img {
-  max-width: 100%;
-  max-height: 100%;
   image-rendering: pixelated;
   display: none;
+  flex: none;
 }
 
 .placeholder {
