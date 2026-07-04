@@ -62,7 +62,8 @@
   "playing": "再生中: {start}–{end}（ループ）",
   "exporting": "エクスポート中…",
   "exportProgress": "エクスポート中… 区間 {done}/{total}",
-  "exportDone": "完了: {frames} フレーム → {raw}（プレビュー mp4: {mp4}）",
+  "tmg1Encoding": "tmg1 にエンコード中…",
+  "exportDone": "完了: {frames} フレーム → {out}（プレビュー mp4: {mp4}）",
   "projectSaved": "プロジェクトを保存しました: {path}",
   "projectOverwritten": "上書き保存しました: {path}",
   "saveFailed": "保存失敗: {err}",
@@ -94,5 +95,11 @@
 
   "dialogVideoFilter": "動画",
   "dialogProjectFilter": "TMG1 Studio プロジェクト",
-  "dialogMonobFilter": "monob raw"
+  "dialogMonobFilter": "monob raw",
+  "dialogTmg1Filter": "tmg1 動画",
+
+  "format": "形式",
+  "formatTmg1": "tmg1",
+  "formatBoth": "両方",
+  "formatRaw": "raw"
 }

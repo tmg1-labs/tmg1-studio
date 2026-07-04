@@ -30,11 +30,34 @@ pub struct Project {
     pub segments: Vec<Segment>,
 }
 
+/// 出力形式。フロントの `<select id="out-format">` から受け取る。
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum ExportFormat {
+    /// monob パック raw のみ。
+    Raw,
+    /// tmg1 のみ（raw は一時ファイルで内部利用のみ）。
+    Tmg1,
+    /// raw と tmg1 の両方。
+    Both,
+}
+
+impl ExportFormat {
+    fn wants_raw(self) -> bool {
+        matches!(self, ExportFormat::Raw | ExportFormat::Both)
+    }
+    fn wants_tmg1(self) -> bool {
+        matches!(self, ExportFormat::Tmg1 | ExportFormat::Both)
+    }
+}
+
 /// エクスポート結果。
 #[derive(Debug, Serialize, Clone)]
 pub struct ExportResult {
-    /// tmg1 encode に渡せる monob パック raw のパス。
-    pub raw_path: String,
+    /// tmg1 encode に渡せる monob パック raw のパス（Raw/Both のときのみ）。
+    pub raw_path: Option<String>,
+    /// 直接再生可能な tmg1 のパス（Tmg1/Both のときのみ）。
+    pub tmg1_path: Option<String>,
     /// 目視確認用に等倍近傍拡大した mp4 のパス。
     pub mp4_path: String,
     /// 総フレーム数。
@@ -292,8 +315,42 @@ fn slice_to_raw_progress(
     Ok(())
 }
 
-/// 全区間を個別に monob raw 化 → 連結 → 目視用 mp4 を生成する。
-pub fn export(app: &AppHandle, p: &Project, out_path: &str) -> Result<ExportResult, String> {
+/// monob パック raw を PATH 上の `tmg1` CLI で tmg1 にエンコードする。
+/// codec 本体は本リポジトリに持ち込まず、ffmpeg 同様にサブプロセスへ委ねる。
+/// Studio の monob は MSB-first で CLI の既定と整合するため追加変換は不要。
+fn encode_tmg1(raw_path: &Path, width: u32, height: u32, fps: f64, out_tmg1: &Path) -> Result<(), String> {
+    let size = format!("{width}x{height}");
+    let out = Command::new("tmg1")
+        .args(["encode", "--size", &size, "--fps", &fps.to_string(), "-i"])
+        .arg(raw_path)
+        .arg("-o")
+        .arg(out_tmg1)
+        .stderr(Stdio::piped())
+        .output()
+        .map_err(|e| {
+            if e.kind() == std::io::ErrorKind::NotFound {
+                "tmg1 CLI が見つかりません。PATH に tmg1 を通してください（`cargo install` 等）".to_string()
+            } else {
+                format!("tmg1 encode を実行できませんでした: {e}")
+            }
+        })?;
+    if !out.status.success() {
+        return Err(format!(
+            "tmg1 エンコードに失敗: {}",
+            String::from_utf8_lossy(&out.stderr)
+        ));
+    }
+    Ok(())
+}
+
+/// 全区間を個別に monob raw 化 → 連結し、指定形式（raw / tmg1 / 両方）で出力する。
+/// あわせて目視用 mp4 を必ず生成する。
+pub fn export(
+    app: &AppHandle,
+    p: &Project,
+    out_path: &str,
+    format: ExportFormat,
+) -> Result<ExportResult, String> {
     if p.width % 8 != 0 {
         return Err(format!(
             "幅 {} は 8 の倍数にしてください（monob のバイト境界のため）",
@@ -304,25 +361,36 @@ pub fn export(app: &AppHandle, p: &Project, out_path: &str) -> Result<ExportResu
         return Err("区間がありません".to_string());
     }
 
-    // raw 出力パス（拡張子が無ければ .raw を付ける）。
-    let raw_path = {
-        let pb = PathBuf::from(out_path);
-        if pb.extension().is_some() {
-            pb
-        } else {
-            pb.with_extension("raw")
-        }
-    };
-
     let tmp = std::env::temp_dir().join(format!("tmg1studio_{}", std::process::id()));
     std::fs::create_dir_all(&tmp).map_err(|e| format!("一時フォルダ作成失敗: {e}"))?;
+
+    // 出力ファイル名は out_path の拡張子を除いた「dir + stem」を基準に raw/tmg1/preview.mp4 を導出する。
+    // これにより形式選択と実際に書く拡張子が食い違わないようにする。
+    let base = {
+        let pb = PathBuf::from(out_path);
+        let stem = pb
+            .file_stem()
+            .map(|s| s.to_string_lossy().into_owned())
+            .unwrap_or_else(|| "output".to_string());
+        let dir = pb.parent().unwrap_or_else(|| Path::new(".")).to_path_buf();
+        dir.join(stem)
+    };
+    let raw_out = base.with_extension("raw");
+    let tmg1_out = base.with_extension("tmg1");
+
+    // raw を書き出す先。raw を成果物にしない（tmg1 のみ）ときは一時ファイルへ。
+    let raw_write_path = if format.wants_raw() {
+        raw_out.clone()
+    } else {
+        tmp.join("concat.raw")
+    };
 
     let frame_bytes = (p.width as u64 * p.height as u64) / 8;
     let total = p.segments.len();
 
     // 出力ファイルへ各区間 raw を順次追記（全体をメモリに載せない）。
     let mut writer = std::io::BufWriter::new(
-        std::fs::File::create(&raw_path).map_err(|e| format!("出力ファイル作成失敗: {e}"))?,
+        std::fs::File::create(&raw_write_path).map_err(|e| format!("出力ファイル作成失敗: {e}"))?,
     );
     let mut total_bytes: u64 = 0;
 
@@ -346,8 +414,8 @@ pub fn export(app: &AppHandle, p: &Project, out_path: &str) -> Result<ExportResu
     writer.flush().map_err(|e| format!("raw フラッシュ失敗: {e}"))?;
     drop(writer);
 
-    // 目視確認用 mp4（近傍拡大 6x, yuv420p）。
-    let mp4_path = preview_mp4_path(&raw_path);
+    // 目視確認用 mp4（近傍拡大 6x, yuv420p）。入力 raw は成果物/一時のどちらでも可。
+    let mp4_path = preview_mp4_path(&raw_out);
     let size = format!("{}x{}", p.width, p.height);
     let mp4_status = Command::new("ffmpeg")
         .args([
@@ -365,7 +433,7 @@ pub fn export(app: &AppHandle, p: &Project, out_path: &str) -> Result<ExportResu
             &p.fps.to_string(),
             "-i",
         ])
-        .arg(&raw_path)
+        .arg(&raw_write_path)
         .args([
             "-vf",
             "scale=iw*6:ih*6:flags=neighbor",
@@ -383,6 +451,17 @@ pub fn export(app: &AppHandle, p: &Project, out_path: &str) -> Result<ExportResu
         ));
     }
 
+    // tmg1 化（形式に含まれるときのみ）。連結済み raw を PATH の tmg1 CLI に委ねる。
+    if format.wants_tmg1() {
+        let _ = app.emit("tmg1-encoding", ());
+        encode_tmg1(&raw_write_path, p.width, p.height, p.fps, &tmg1_out)?;
+    }
+
+    // tmg1 のみのときは一時 raw を掃除する。
+    if !format.wants_raw() {
+        let _ = std::fs::remove_file(&raw_write_path);
+    }
+
     let frames = if frame_bytes > 0 {
         total_bytes / frame_bytes
     } else {
@@ -390,7 +469,8 @@ pub fn export(app: &AppHandle, p: &Project, out_path: &str) -> Result<ExportResu
     };
 
     Ok(ExportResult {
-        raw_path: raw_path.to_string_lossy().into_owned(),
+        raw_path: format.wants_raw().then(|| raw_out.to_string_lossy().into_owned()),
+        tmg1_path: format.wants_tmg1().then(|| tmg1_out.to_string_lossy().into_owned()),
         mp4_path: mp4_path.to_string_lossy().into_owned(),
         frames,
     })

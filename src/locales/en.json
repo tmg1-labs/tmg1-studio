@@ -62,7 +62,8 @@
   "playing": "Playing: {start}–{end} (loop)",
   "exporting": "Exporting…",
   "exportProgress": "Exporting… segment {done}/{total}",
-  "exportDone": "Done: {frames} frames → {raw} (preview mp4: {mp4})",
+  "tmg1Encoding": "Encoding to tmg1…",
+  "exportDone": "Done: {frames} frames → {out} (preview mp4: {mp4})",
   "projectSaved": "Project saved: {path}",
   "projectOverwritten": "Overwritten: {path}",
   "saveFailed": "Save failed: {err}",
@@ -94,5 +95,11 @@
 
   "dialogVideoFilter": "Video",
   "dialogProjectFilter": "TMG1 Studio project",
-  "dialogMonobFilter": "monob raw"
+  "dialogMonobFilter": "monob raw",
+  "dialogTmg1Filter": "tmg1 video",
+
+  "format": "Format",
+  "formatTmg1": "tmg1",
+  "formatBoth": "both",
+  "formatRaw": "raw"
 }

@@ -36,7 +36,8 @@ interface VideoInfo {
 }
 
 interface ExportResult {
-  raw_path: string;
+  raw_path?: string | null;
+  tmg1_path?: string | null;
   mp4_path: string;
   frames: number;
 }
@@ -123,6 +124,7 @@ const fileInfo = $("file-info");
 const outW = $("out-w") as HTMLInputElement;
 const outH = $("out-h") as HTMLInputElement;
 const outFps = $("out-fps") as HTMLInputElement;
+const outFormat = $("out-format") as HTMLSelectElement;
 const previewImg = $("preview-img") as HTMLImageElement;
 const previewVideo = $("preview-video") as HTMLVideoElement;
 const previewPlaceholder = $("preview-placeholder");
@@ -1047,9 +1049,14 @@ async function doExport() {
     return;
   }
 
+  // 出力形式（tmg1 / both / raw）。tmg1 のみ拡張子・フィルタを .tmg1 に、それ以外は .raw。
+  const format = outFormat.value;
+  const tmg1Only = format === "tmg1";
   const target = await save({
-    defaultPath: "output.raw",
-    filters: [{ name: t("dialogMonobFilter"), extensions: ["raw"] }],
+    defaultPath: tmg1Only ? "output.tmg1" : "output.raw",
+    filters: tmg1Only
+      ? [{ name: t("dialogTmg1Filter"), extensions: ["tmg1"] }]
+      : [{ name: t("dialogMonobFilter"), extensions: ["raw"] }],
   });
   if (!target) return;
 
@@ -1068,11 +1075,14 @@ async function doExport() {
     const result = await invoke<ExportResult>("export", {
       project,
       outPath: target,
+      format,
     });
+    // 成果物パスは形式で出し分け（tmg1 があれば優先表示）。
+    const out = result.tmg1_path ?? result.raw_path ?? result.mp4_path;
     setStatus(
       t("exportDone", {
         frames: result.frames,
-        raw: result.raw_path,
+        out,
         mp4: result.mp4_path,
       }),
     );
@@ -1083,6 +1093,11 @@ async function doExport() {
     exportBtn.disabled = false;
   }
 }
+
+// tmg1 エンコード開始イベント（CLI 実行中）。
+listen("tmg1-encoding", () => {
+  setStatus(t("tmg1Encoding"));
+});
 
 // エクスポート進捗イベント。
 listen<{ done: number; total: number }>("export-progress", (ev) => {

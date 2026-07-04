@@ -3,7 +3,7 @@ mod filter;
 
 use base64::{engine::general_purpose::STANDARD, Engine};
 
-use ffmpeg::{ExportResult, Project, VideoInfo};
+use ffmpeg::{ExportFormat, ExportResult, Project, VideoInfo};
 use filter::Segment;
 
 /// 入力動画の情報を取得する。
@@ -59,14 +59,15 @@ fn load_project(path: String) -> Result<String, String> {
     std::fs::read_to_string(&path).map_err(|e| format!("プロジェクト読み込みに失敗: {e}"))
 }
 
-/// プロジェクトをエクスポート（monob raw + 目視用 mp4）。
+/// プロジェクトをエクスポート（形式に応じて raw / tmg1、常に目視用 mp4）。
 #[tauri::command]
 async fn export(
     app: tauri::AppHandle,
     project: Project,
     out_path: String,
+    format: ExportFormat,
 ) -> Result<ExportResult, String> {
-    tauri::async_runtime::spawn_blocking(move || ffmpeg::export(&app, &project, &out_path))
+    tauri::async_runtime::spawn_blocking(move || ffmpeg::export(&app, &project, &out_path, format))
         .await
         .map_err(|e| format!("タスク実行失敗: {e}"))?
 }
