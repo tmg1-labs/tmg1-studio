@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open, save } from "@tauri-apps/plugin-dialog";
+import { load, type Store } from "@tauri-apps/plugin-store";
 
 // ---- 型（Rust 側 serde と対応）----
 type Dither = "none" | "bayer" | "ed";
@@ -27,6 +28,24 @@ interface ExportResult {
   mp4_path: string;
   frames: number;
 }
+
+// 区間パラメータのプリセット（tauri-plugin-store で永続化）。
+interface Preset {
+  name: string;
+  contrast: number;
+  level_lo: number;
+  level_hi: number;
+  dither: Dither;
+}
+
+// 初回起動時に seed する組み込みプリセット（howto の実証済みレシピ）。seed 後は
+// 通常のプリセットと同様に削除・上書きできる。
+const BUILTIN_PRESETS: Preset[] = [
+  { name: "そのまま (Bayer)", contrast: 1.0, level_lo: 0, level_hi: 255, dither: "bayer" },
+  { name: "レベル絞り 32–192 + Bayer", contrast: 1.0, level_lo: 32, level_hi: 192, dither: "bayer" },
+  { name: "2値 (ディザなし)", contrast: 1.0, level_lo: 0, level_hi: 255, dither: "none" },
+  { name: "コントラスト強め + 誤差拡散", contrast: 1.3, level_lo: 0, level_hi: 255, dither: "ed" },
+];
 
 // ---- 状態 ----
 const state = {
@@ -77,6 +96,11 @@ const contrastEl = $("contrast") as HTMLInputElement;
 const loEl = $("level-lo") as HTMLInputElement;
 const hiEl = $("level-hi") as HTMLInputElement;
 const ditherEl = $("dither") as HTMLSelectElement;
+const presetListEl = $("preset-list") as HTMLSelectElement;
+const presetNameEl = $("preset-name") as HTMLInputElement;
+const presetApplyBtn = $("preset-apply") as HTMLButtonElement;
+const presetSaveBtn = $("preset-save") as HTMLButtonElement;
+const presetDeleteBtn = $("preset-delete") as HTMLButtonElement;
 const contrastVal = $("contrast-val");
 const loVal = $("lo-val");
 const hiVal = $("hi-val");
@@ -702,6 +726,101 @@ listen<{ done: number; total: number }>("export-progress", (ev) => {
   setStatus(`エクスポート中… 区間 ${ev.payload.done}/${ev.payload.total}`);
 });
 
+// ---- プリセット（tauri-plugin-store で永続化）----
+let presetStore: Store | null = null;
+let presets: Preset[] = [];
+
+async function initPresets() {
+  try {
+    // defaults で組み込みプリセットを seed。初回は defaults が返り、以降はディスク
+    // 状態が優先される（削除・上書きは保存後にディスクへ反映されるので永続化される）。
+    presetStore = await load("presets.json", {
+      defaults: { presets: BUILTIN_PRESETS },
+      autoSave: true,
+    });
+    const saved = await presetStore.get<Preset[]>("presets");
+    presets = saved ?? [...BUILTIN_PRESETS];
+    populatePresetList();
+  } catch (e) {
+    setStatus(`プリセットの読み込みに失敗: ${e}`, true);
+  }
+}
+
+function populatePresetList() {
+  presetListEl.innerHTML = "";
+  for (const p of presets) {
+    const opt = document.createElement("option");
+    opt.value = p.name;
+    opt.textContent = p.name;
+    presetListEl.appendChild(opt);
+  }
+}
+
+async function persistPresets() {
+  if (!presetStore) return;
+  await presetStore.set("presets", presets);
+  await presetStore.save();
+}
+
+// 選択中プリセットを現在区間に適用。
+presetApplyBtn.addEventListener("click", () => {
+  const seg = currentSegment();
+  if (!seg) {
+    setStatus("先に動画を読み込んでください", true);
+    return;
+  }
+  const p = presets.find((x) => x.name === presetListEl.value);
+  if (!p) return;
+  seg.contrast = p.contrast;
+  seg.level_lo = p.level_lo;
+  seg.level_hi = p.level_hi;
+  seg.dither = p.dither;
+  syncParamInputs();
+  schedulePreview();
+  setStatus(`プリセット「${p.name}」を区間 #${currentIndex() + 1} に適用`);
+});
+
+// 現在区間のパラメータを名前を付けて保存（同名は上書き）。
+presetSaveBtn.addEventListener("click", async () => {
+  const seg = currentSegment();
+  if (!seg) {
+    setStatus("先に動画を読み込んでください", true);
+    return;
+  }
+  const name = presetNameEl.value.trim();
+  if (!name) {
+    setStatus("プリセット名を入力してください", true);
+    return;
+  }
+  const preset: Preset = {
+    name,
+    contrast: seg.contrast,
+    level_lo: seg.level_lo,
+    level_hi: seg.level_hi,
+    dither: seg.dither,
+  };
+  const idx = presets.findIndex((x) => x.name === name);
+  if (idx >= 0) presets[idx] = preset;
+  else presets.push(preset);
+  await persistPresets();
+  populatePresetList();
+  presetListEl.value = name;
+  presetNameEl.value = "";
+  setStatus(`プリセット「${name}」を保存`);
+});
+
+// 選択中プリセットを削除。
+presetDeleteBtn.addEventListener("click", async () => {
+  const name = presetListEl.value;
+  const idx = presets.findIndex((x) => x.name === name);
+  if (idx < 0) return;
+  presets.splice(idx, 1);
+  await persistPresets();
+  populatePresetList();
+  setStatus(`プリセット「${name}」を削除`);
+});
+
 // ---- 初期化 ----
 openBtn.addEventListener("click", openVideo);
 setStatus("「動画を開く」から始めてください");
+initPresets();
