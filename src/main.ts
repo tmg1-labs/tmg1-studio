@@ -86,7 +86,8 @@ const state = {
   playing: false,
 };
 
-let objectUrl: string | null = null; // 再生中の Blob URL
+let objectUrl: string | null = null; // レンダリング済み再生 mp4 の Blob URL（停止しても保持）
+let renderValid = false; // objectUrl が現在の範囲/パラメータと一致しているか
 let projectPath: string | null = null; // 現在のプロジェクトファイル(.tmgproj)のパス
 let dirty = false; // 未保存の変更があるか
 let followRaf: number | null = null; // 再生位置追従の rAF ハンドル
@@ -184,9 +185,11 @@ function clamp(v: number, lo: number, hi: number): number {
   return Math.min(hi, Math.max(lo, v));
 }
 
-// 保存対象（区間・パラメータ・範囲・出力設定）を編集したら未保存フラグを立てる。
+// 保存対象（区間・パラメータ・範囲・出力設定）を編集したら未保存フラグを立て、
+// レンダリング済み再生キャッシュを無効化する（次の再生で作り直す）。
 function markDirty() {
   dirty = true;
+  renderValid = false;
 }
 
 // 入力パスと ffprobe 情報から編集状態をセットアップする。
@@ -226,6 +229,7 @@ function applyProject(
     state.playEnd = info.duration;
   }
   stopPlayback();
+  discardRender();
 
   updateFileInfo();
 
@@ -345,6 +349,7 @@ async function closeProject() {
     return;
   }
   stopPlayback();
+  discardRender();
   state.inputPath = null;
   state.segments = [];
   state.duration = 0;
@@ -884,19 +889,43 @@ function followTick() {
   followRaf = requestAnimationFrame(followTick);
 }
 
+// 一時停止（レンダリング済み Blob は保持し、再生ボタンで再レンダリングせず再開できる）。
 function stopPlayback() {
   if (followRaf !== null) {
     cancelAnimationFrame(followRaf);
     followRaf = null;
   }
   previewVideo.pause();
-  previewVideo.removeAttribute("src");
-  previewVideo.load();
-  revokeUrl();
   previewVideo.style.display = "none";
   previewImg.style.display = "block";
   state.playing = false;
   updatePlayButtonLabel();
+}
+
+// レンダリング結果を完全に破棄（プロジェクト切替・クローズ時）。
+function discardRender() {
+  previewVideo.pause();
+  previewVideo.removeAttribute("src");
+  previewVideo.load();
+  revokeUrl();
+  renderValid = false;
+}
+
+// <video> の再生を開始（レンダリング済み前提。追従ループも開始）。
+function beginVideoPlayback() {
+  previewImg.style.display = "none";
+  previewVideo.style.display = "block";
+  applyZoom();
+  void previewVideo.play().catch(() => {});
+  state.playing = true;
+  updatePlayButtonLabel();
+  followRaf = requestAnimationFrame(followTick);
+  setStatus(
+    t("playing", {
+      start: fmtTime(state.playStart),
+      end: fmtTime(state.playEnd),
+    }),
+  );
 }
 
 async function startPlayback() {
@@ -910,6 +939,11 @@ async function startPlayback() {
   }
   if (state.playEnd <= state.playStart) {
     setStatus(t("rangeEmpty"), true);
+    return;
+  }
+  // 範囲・パラメータが未変更なら、既存レンダリングをそのまま再生（再レンダリングしない）。
+  if (renderValid && objectUrl) {
+    beginVideoPlayback();
     return;
   }
   playBtn.disabled = true;
@@ -931,19 +965,8 @@ async function startPlayback() {
     revokeUrl();
     objectUrl = URL.createObjectURL(new Blob([buf], { type: "video/mp4" }));
     previewVideo.src = objectUrl;
-    previewImg.style.display = "none";
-    previewVideo.style.display = "block";
-    applyZoom();
-    await previewVideo.play().catch(() => {});
-    state.playing = true;
-    updatePlayButtonLabel();
-    followRaf = requestAnimationFrame(followTick);
-    setStatus(
-      t("playing", {
-        start: fmtTime(state.playStart),
-        end: fmtTime(state.playEnd),
-      }),
-    );
+    renderValid = true;
+    beginVideoPlayback();
   } catch (e) {
     setStatus(String(e), true);
   } finally {
