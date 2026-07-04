@@ -3,6 +3,14 @@ import { listen } from "@tauri-apps/api/event";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { load, type Store } from "@tauri-apps/plugin-store";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import {
+  t,
+  setLocale,
+  detectLocale,
+  isLocale,
+  LOCALES,
+  type Locale,
+} from "./i18n";
 
 // Vite の define で埋め込まれる表示バージョン（VITE_APP_VERSION → package.json）。
 declare const __APP_VERSION__: string;
@@ -57,10 +65,10 @@ interface Preset {
 // 初回起動時に seed する組み込みプリセット（howto の実証済みレシピ）。seed 後は
 // 通常のプリセットと同様に削除・上書きできる。
 const BUILTIN_PRESETS: Preset[] = [
-  { name: "そのまま (Bayer)", contrast: 1.0, level_lo: 0, level_hi: 255, dither: "bayer" },
-  { name: "レベル絞り 32–192 + Bayer", contrast: 1.0, level_lo: 32, level_hi: 192, dither: "bayer" },
-  { name: "2値 (ディザなし)", contrast: 1.0, level_lo: 0, level_hi: 255, dither: "none" },
-  { name: "コントラスト強め + 誤差拡散", contrast: 1.3, level_lo: 0, level_hi: 255, dither: "ed" },
+  { name: "Plain (Bayer)", contrast: 1.0, level_lo: 0, level_hi: 255, dither: "bayer" },
+  { name: "Level squeeze 32-192 + Bayer", contrast: 1.0, level_lo: 32, level_hi: 192, dither: "bayer" },
+  { name: "Threshold (no dither)", contrast: 1.0, level_lo: 0, level_hi: 255, dither: "none" },
+  { name: "High contrast + error diffusion", contrast: 1.3, level_lo: 0, level_hi: 255, dither: "ed" },
 ];
 
 // ---- 状態 ----
@@ -107,6 +115,7 @@ const confirmMsgEl = $("confirm-msg");
 const modalSaveBtn = $("modal-save") as HTMLButtonElement;
 const modalDiscardBtn = $("modal-discard") as HTMLButtonElement;
 const modalCancelBtn = $("modal-cancel") as HTMLButtonElement;
+const langSelect = $("lang-select") as HTMLSelectElement;
 const splitBtn = $("split-btn") as HTMLButtonElement;
 const deleteBtn = $("delete-btn") as HTMLButtonElement;
 const fileInfo = $("file-info");
@@ -215,10 +224,7 @@ function applyProject(
   }
   stopPlayback();
 
-  const name = path.split(/[\\/]/).pop() ?? path;
-  fileInfo.textContent = `${name}  (${info.width}x${info.height}, ${info.fps.toFixed(2)}fps, ${fmtTime(
-    info.duration,
-  )})`;
+  updateFileInfo();
 
   scrubEl.disabled = false;
   scrubEl.value = "0";
@@ -245,7 +251,28 @@ function applyProject(
 
 // 保存ボタンのラベル: 未保存の新規は「保存」、保存先が確定していれば「上書き」。
 function updateSaveLabel() {
-  saveBtn.textContent = projectPath ? "上書き" : "保存";
+  saveBtn.textContent = projectPath ? t("overwrite") : t("save");
+}
+
+// ファイル情報表示（state から再構築できるので言語切替時にも呼べる）。
+function updateFileInfo() {
+  if (!state.inputPath) {
+    fileInfo.textContent = t("noVideo");
+    return;
+  }
+  const name = state.inputPath.split(/[\\/]/).pop() ?? state.inputPath;
+  fileInfo.textContent = t("fileInfo", {
+    name,
+    w: state.inputW,
+    h: state.inputH,
+    fps: state.inputFps.toFixed(2),
+    dur: fmtTime(state.duration),
+  });
+}
+
+// 再生ボタンのラベル（再生状態で切替。言語切替時にも呼ぶ）。
+function updatePlayButtonLabel() {
+  playBtn.textContent = state.playing ? t("stop") : t("play");
 }
 
 // ---- 新規作成（動画読み込みを兼ねる）----
@@ -253,17 +280,17 @@ async function openVideo() {
   const selected = await open({
     multiple: false,
     filters: [
-      { name: "動画", extensions: ["mp4", "mov", "avi", "mkv", "webm", "m4v", "gif"] },
+      { name: t("dialogVideoFilter"), extensions: ["mp4", "mov", "avi", "mkv", "webm", "m4v", "gif"] },
     ],
   });
   if (!selected || typeof selected !== "string") return;
 
-  setStatus("ffprobe で解析中…");
+  setStatus(t("probing"));
   try {
     const info = await invoke<VideoInfo>("probe_video", { path: selected });
     projectPath = null; // 新規はまだ保存先なし → ボタンは「保存」
     applyProject(selected, info);
-    setStatus("読み込み完了");
+    setStatus(t("loaded"));
   } catch (e) {
     setStatus(String(e), true);
   }
@@ -311,7 +338,7 @@ async function confirmUnsaved(message: string): Promise<boolean> {
 
 // プロジェクトを閉じて起動時の状態へ戻す。
 async function closeProject() {
-  if (!(await confirmUnsaved("保存されていない変更があります。プロジェクトを閉じますか？"))) {
+  if (!(await confirmUnsaved(t("confirmClose")))) {
     return;
   }
   stopPlayback();
@@ -325,9 +352,9 @@ async function closeProject() {
   dirty = false;
   previewImg.style.display = "none";
   previewImg.removeAttribute("src");
-  fileInfo.textContent = "動画が未読み込みです";
+  updateFileInfo();
   document.body.classList.add("no-project");
-  setStatus("プロジェクトを閉じました");
+  setStatus(t("projectClosed"));
 }
 
 // ---- プロジェクト保存 / 読込 ----
@@ -354,30 +381,30 @@ async function writeProject(target: string) {
 // 戻り値 = 保存できたか（ダイアログをキャンセル or 失敗なら false）。
 async function onSaveClick(): Promise<boolean> {
   if (!state.inputPath) {
-    setStatus("先に動画を読み込んでください", true);
+    setStatus(t("needVideoFirst"), true);
     return false;
   }
   try {
     if (projectPath) {
       await writeProject(projectPath);
       dirty = false;
-      setStatus(`上書き保存しました: ${projectPath}`);
+      setStatus(t("projectOverwritten", { path: projectPath }));
       return true;
     } else {
       const target = await save({
         defaultPath: "project.tmgproj",
-        filters: [{ name: "TMG1 Studio プロジェクト", extensions: ["tmgproj"] }],
+        filters: [{ name: t("dialogProjectFilter"), extensions: ["tmgproj"] }],
       });
       if (!target) return false;
       await writeProject(target);
       projectPath = target;
       dirty = false;
       updateSaveLabel(); // 以後は「上書き」
-      setStatus(`プロジェクトを保存しました: ${target}`);
+      setStatus(t("projectSaved", { path: target }));
       return true;
     }
   } catch (e) {
-    setStatus(`保存失敗: ${e}`, true);
+    setStatus(t("saveFailed", { err: String(e) }), true);
     return false;
   }
 }
@@ -385,15 +412,15 @@ async function onSaveClick(): Promise<boolean> {
 async function loadProject() {
   const selected = await open({
     multiple: false,
-    filters: [{ name: "TMG1 Studio プロジェクト", extensions: ["tmgproj", "json"] }],
+    filters: [{ name: t("dialogProjectFilter"), extensions: ["tmgproj", "json"] }],
   });
   if (!selected || typeof selected !== "string") return;
-  setStatus("プロジェクトを読み込み中…");
+  setStatus(t("projectLoading"));
   try {
     const text = await invoke<string>("load_project", { path: selected });
     const data = JSON.parse(text) as ProjectFile;
     if (!data || !Array.isArray(data.segments) || !data.input_path) {
-      throw new Error("プロジェクト形式が不正です");
+      throw new Error(t("projectInvalid"));
     }
     // 参照している入力動画を再解析（尺・サイズ・fps を取得。存在確認も兼ねる）。
     const info = await invoke<VideoInfo>("probe_video", { path: data.input_path });
@@ -406,9 +433,9 @@ async function loadProject() {
       height: data.height,
       fps: data.fps,
     });
-    setStatus(`プロジェクトを読み込みました: ${selected}`);
+    setStatus(t("projectLoaded", { path: selected }));
   } catch (e) {
-    setStatus(`プロジェクト読み込み失敗: ${e}`, true);
+    setStatus(t("projectLoadFailed", { err: String(e) }), true);
   }
 }
 
@@ -469,14 +496,14 @@ function renderTimeline() {
     const hStart = document.createElement("div");
     hStart.className = "range-handle start";
     hStart.style.left = `${rs}%`;
-    hStart.title = "再生開始";
+    hStart.title = t("rangeStartHandle");
     hStart.addEventListener("mousedown", (e) => startRangeDrag(e, "start"));
     timelineEl.appendChild(hStart);
 
     const hEnd = document.createElement("div");
     hEnd.className = "range-handle end";
     hEnd.style.left = `${re}%`;
-    hEnd.title = "再生終了";
+    hEnd.title = t("rangeEndHandle");
     hEnd.addEventListener("mousedown", (e) => startRangeDrag(e, "end"));
     timelineEl.appendChild(hEnd);
   }
@@ -493,9 +520,12 @@ function renderTimeline() {
 
 /** 時刻読み出し（playhead / 全体 ｜ 範囲）を更新する。 */
 function updateReadout() {
-  timeReadout.textContent = `${fmtTime(state.playhead)} / ${fmtTime(
-    state.duration,
-  )}　｜　範囲 ${fmtTime(state.playStart)}–${fmtTime(state.playEnd)}`;
+  timeReadout.textContent = t("readout", {
+    playhead: fmtTime(state.playhead),
+    dur: fmtTime(state.duration),
+    start: fmtTime(state.playStart),
+    end: fmtTime(state.playEnd),
+  });
 }
 
 // ---- 再生範囲ドラッグ（区間境界・0・終端にスナップ）----
@@ -620,23 +650,23 @@ scrubEl.addEventListener("change", () => {
 splitBtn.addEventListener("click", () => {
   const idx = currentIndex();
   const seg = state.segments[idx];
-  const t = state.playhead;
-  if (t <= seg.start_sec + 0.05 || t >= seg.end_sec - 0.05) {
-    setStatus("区間の端に近すぎるため分割できません", true);
+  const ph = state.playhead;
+  if (ph <= seg.start_sec + 0.05 || ph >= seg.end_sec - 0.05) {
+    setStatus(t("splitTooClose"), true);
     return;
   }
-  const right = makeSegment(t, seg.end_sec, seg);
-  seg.end_sec = t;
+  const right = makeSegment(ph, seg.end_sec, seg);
+  seg.end_sec = ph;
   state.segments.splice(idx + 1, 0, right);
   renderTimeline();
   syncParamInputs();
   markDirty();
-  setStatus(`区間を分割しました（計 ${state.segments.length}）`);
+  setStatus(t("splitDone", { n: state.segments.length }));
 });
 
 deleteBtn.addEventListener("click", () => {
   if (state.segments.length <= 1) {
-    setStatus("区間が1つのため削除できません", true);
+    setStatus(t("deleteOnlyOne"), true);
     return;
   }
   const idx = currentIndex();
@@ -650,7 +680,7 @@ deleteBtn.addEventListener("click", () => {
   renderTimeline();
   syncParamInputs();
   markDirty();
-  setStatus(`区間を結合削除しました（計 ${state.segments.length}）`);
+  setStatus(t("mergeDone", { n: state.segments.length }));
 });
 
 // ---- パラメータ入力 ----
@@ -666,7 +696,11 @@ function syncParamInputs() {
   const seg = currentSegment();
   if (!seg) return;
   const idx = currentIndex();
-  segLabel.textContent = `区間 #${idx + 1}: ${fmtTime(seg.start_sec)} – ${fmtTime(seg.end_sec)}`;
+  segLabel.textContent = t("segLabel", {
+    n: idx + 1,
+    start: fmtTime(seg.start_sec),
+    end: fmtTime(seg.end_sec),
+  });
   contrastEl.value = String(seg.contrast);
   loEl.value = String(seg.level_lo);
   hiEl.value = String(seg.level_hi);
@@ -754,9 +788,15 @@ async function runPreview() {
     previewImg.src = dataUrl;
     previewImg.style.display = "block";
     applyZoom();
-    previewMeta.textContent = `${w}x${h}  @ ${fmtTime(state.playhead)}  dither=${seg.dither}  contrast=${seg.contrast.toFixed(
-      2,
-    )}  level=[${seg.level_lo},${seg.level_hi}]`;
+    previewMeta.textContent = t("previewMeta", {
+      w,
+      h,
+      t: fmtTime(state.playhead),
+      dither: seg.dither,
+      contrast: seg.contrast.toFixed(2),
+      lo: seg.level_lo,
+      hi: seg.level_hi,
+    });
   } catch (e) {
     if (seq === previewSeq) setStatus(String(e), true);
   }
@@ -834,7 +874,7 @@ function stopPlayback() {
   previewVideo.style.display = "none";
   previewImg.style.display = "block";
   state.playing = false;
-  playBtn.textContent = "▶ 再生";
+  updatePlayButtonLabel();
 }
 
 async function startPlayback() {
@@ -843,15 +883,15 @@ async function startPlayback() {
   const h = Number(outH.value);
   const fps = Number(outFps.value);
   if (w % 8 !== 0) {
-    setStatus("幅は 8 の倍数にしてください（monob のバイト境界）", true);
+    setStatus(t("widthMul8"), true);
     return;
   }
   if (state.playEnd <= state.playStart) {
-    setStatus("再生範囲が空です", true);
+    setStatus(t("rangeEmpty"), true);
     return;
   }
   playBtn.disabled = true;
-  setStatus("再生用にレンダリング中…");
+  setStatus(t("rendering"));
   try {
     const project = {
       input_path: state.inputPath,
@@ -873,10 +913,13 @@ async function startPlayback() {
     applyZoom();
     await previewVideo.play().catch(() => {});
     state.playing = true;
-    playBtn.textContent = "■ 停止";
+    updatePlayButtonLabel();
     followRaf = requestAnimationFrame(followTick);
     setStatus(
-      `再生中: ${fmtTime(state.playStart)}–${fmtTime(state.playEnd)}（ループ）`,
+      t("playing", {
+        start: fmtTime(state.playStart),
+        end: fmtTime(state.playEnd),
+      }),
     );
   } catch (e) {
     setStatus(String(e), true);
@@ -906,7 +949,7 @@ rangeToSegBtn.addEventListener("click", () => {
   state.playEnd = seg.end_sec;
   renderTimeline();
   markDirty();
-  setStatus(`再生範囲を区間 #${currentIndex() + 1} に設定`);
+  setStatus(t("rangeToSegDone", { n: currentIndex() + 1 }));
 });
 
 // 範囲を編集したときの共通後処理（再生中なら停止して静止プレビューへ）。
@@ -924,7 +967,7 @@ rangeSetStartBtn.addEventListener("click", () => {
   if (!state.inputPath) return;
   state.playStart = Math.max(0, Math.min(state.playhead, state.playEnd - 0.05));
   afterRangeEdited();
-  setStatus(`範囲の始点を ${fmtTime(state.playStart)} に設定`);
+  setStatus(t("rangeStartSet", { t: fmtTime(state.playStart) }));
 });
 
 // 再生位置（playhead）を範囲の終点に設定。
@@ -932,7 +975,7 @@ rangeSetEndBtn.addEventListener("click", () => {
   if (!state.inputPath) return;
   state.playEnd = Math.min(state.duration, Math.max(state.playhead, state.playStart + 0.05));
   afterRangeEdited();
-  setStatus(`範囲の終点を ${fmtTime(state.playEnd)} に設定`);
+  setStatus(t("rangeEndSet", { t: fmtTime(state.playEnd) }));
 });
 
 // 範囲を全体に戻す（解除）。
@@ -941,7 +984,7 @@ rangeClearBtn.addEventListener("click", () => {
   state.playStart = 0;
   state.playEnd = state.duration;
   afterRangeEdited();
-  setStatus("再生範囲を全体に戻しました");
+  setStatus(t("rangeReset"));
 });
 
 // ---- エクスポート ----
@@ -953,19 +996,19 @@ async function doExport() {
   const h = Number(outH.value);
   const fps = Number(outFps.value);
   if (w % 8 !== 0) {
-    setStatus("幅は 8 の倍数にしてください（monob のバイト境界）", true);
+    setStatus(t("widthMul8"), true);
     return;
   }
 
   const target = await save({
     defaultPath: "output.raw",
-    filters: [{ name: "monob raw", extensions: ["raw"] }],
+    filters: [{ name: t("dialogMonobFilter"), extensions: ["raw"] }],
   });
   if (!target) return;
 
   state.exporting = true;
   exportBtn.disabled = true;
-  setStatus("エクスポート中…");
+  setStatus(t("exporting"));
 
   try {
     const project = {
@@ -980,7 +1023,11 @@ async function doExport() {
       outPath: target,
     });
     setStatus(
-      `完了: ${result.frames} フレーム → ${result.raw_path}（プレビュー mp4: ${result.mp4_path}）`,
+      t("exportDone", {
+        frames: result.frames,
+        raw: result.raw_path,
+        mp4: result.mp4_path,
+      }),
     );
   } catch (e) {
     setStatus(String(e), true);
@@ -992,7 +1039,7 @@ async function doExport() {
 
 // エクスポート進捗イベント。
 listen<{ done: number; total: number }>("export-progress", (ev) => {
-  setStatus(`エクスポート中… 区間 ${ev.payload.done}/${ev.payload.total}`);
+  setStatus(t("exportProgress", { done: ev.payload.done, total: ev.payload.total }));
 });
 
 // ---- プリセット（tauri-plugin-store で永続化）----
@@ -1011,7 +1058,7 @@ async function initPresets() {
     presets = saved ?? [...BUILTIN_PRESETS];
     populatePresetList();
   } catch (e) {
-    setStatus(`プリセットの読み込みに失敗: ${e}`, true);
+    setStatus(t("presetLoadFailed", { err: String(e) }), true);
   }
 }
 
@@ -1035,7 +1082,7 @@ async function persistPresets() {
 presetApplyBtn.addEventListener("click", () => {
   const seg = currentSegment();
   if (!seg) {
-    setStatus("先に動画を読み込んでください", true);
+    setStatus(t("needVideoFirst"), true);
     return;
   }
   const p = presets.find((x) => x.name === presetListEl.value);
@@ -1047,19 +1094,19 @@ presetApplyBtn.addEventListener("click", () => {
   syncParamInputs();
   markDirty();
   schedulePreview();
-  setStatus(`プリセット「${p.name}」を区間 #${currentIndex() + 1} に適用`);
+  setStatus(t("presetApplied", { name: p.name, n: currentIndex() + 1 }));
 });
 
 // 現在区間のパラメータを名前を付けて保存（同名は上書き）。
 presetSaveBtn.addEventListener("click", async () => {
   const seg = currentSegment();
   if (!seg) {
-    setStatus("先に動画を読み込んでください", true);
+    setStatus(t("needVideoFirst"), true);
     return;
   }
   const name = presetNameEl.value.trim();
   if (!name) {
-    setStatus("プリセット名を入力してください", true);
+    setStatus(t("presetNameRequired"), true);
     return;
   }
   const preset: Preset = {
@@ -1076,7 +1123,7 @@ presetSaveBtn.addEventListener("click", async () => {
   populatePresetList();
   presetListEl.value = name;
   presetNameEl.value = "";
-  setStatus(`プリセット「${name}」を保存`);
+  setStatus(t("presetSaved", { name }));
 });
 
 // 選択中プリセットを削除。
@@ -1087,7 +1134,7 @@ presetDeleteBtn.addEventListener("click", async () => {
   presets.splice(idx, 1);
   await persistPresets();
   populatePresetList();
-  setStatus(`プリセット「${name}」を削除`);
+  setStatus(t("presetDeleted", { name }));
 });
 
 // ---- 設定メニュー（歯車）----
@@ -1108,10 +1155,64 @@ document.addEventListener("click", (e) => {
 // 保存する/保存しない→終了、キャンセル→終了を止める。
 getCurrentWindow().onCloseRequested(async (event) => {
   if (!dirty) return;
-  const proceed = await confirmUnsaved(
-    "保存されていない変更があります。アプリを終了しますか？",
-  );
+  const proceed = await confirmUnsaved(t("confirmQuit"));
   if (!proceed) event.preventDefault();
+});
+
+// ---- 言語 ----
+let settingsStore: Store | null = null;
+
+function populateLangSelect() {
+  langSelect.innerHTML = "";
+  for (const l of LOCALES) {
+    const opt = document.createElement("option");
+    opt.value = l.code;
+    opt.textContent = l.label;
+    langSelect.appendChild(opt);
+  }
+}
+
+// data-i18n で拾えない動的 UI を言語切替時に更新する。
+function refreshDynamicUi() {
+  updateSaveLabel();
+  updatePlayButtonLabel();
+  updateFileInfo();
+  if (state.inputPath) {
+    renderTimeline();
+    syncParamInputs();
+  }
+}
+
+async function changeLocale(loc: Locale, persist = true) {
+  setLocale(loc); // 静的 DOM(data-i18n)を適用
+  refreshDynamicUi();
+  langSelect.value = loc;
+  if (persist && settingsStore) {
+    await settingsStore.set("locale", loc);
+    await settingsStore.save();
+  }
+}
+
+async function initLocale() {
+  populateLangSelect();
+  let loc: Locale = detectLocale();
+  try {
+    settingsStore = await load("settings.json", {
+      defaults: { locale: "" },
+      autoSave: true,
+    });
+    const saved = await settingsStore.get<string>("locale");
+    if (isLocale(saved)) loc = saved;
+  } catch {
+    // ストア不可時はブラウザ言語で継続。
+  }
+  await changeLocale(loc, false);
+  setStatus(t("statusStart"));
+}
+
+langSelect.addEventListener("change", () => {
+  const v = langSelect.value;
+  if (isLocale(v)) changeLocale(v);
 });
 
 // ---- 初期化 ----
@@ -1119,5 +1220,5 @@ newBtn.addEventListener("click", openVideo);
 loadBtn.addEventListener("click", loadProject);
 saveBtn.addEventListener("click", onSaveClick);
 closeBtn.addEventListener("click", closeProject);
-setStatus("「新規作成」または「開く」から始めてください");
+initLocale();
 initPresets();

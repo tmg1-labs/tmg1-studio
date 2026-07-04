@@ -10,22 +10,26 @@
 
   <body class="no-project">
     <header class="toolbar">
-      <button id="new-btn" class="primary no-project-only">新規作成</button>
-      <button id="load-btn" class="no-project-only">開く</button>
+      <button id="new-btn" class="primary no-project-only" data-i18n="new">新規作成</button>
+      <button id="load-btn" class="no-project-only" data-i18n="open">開く</button>
       <button id="save-btn" class="project-only">保存</button>
-      <button id="close-btn" class="project-only">閉じる</button>
-      <span id="file-info" class="file-info project-only">動画が未読み込みです</span>
+      <button id="close-btn" class="project-only" data-i18n="close">閉じる</button>
+      <span id="file-info" class="file-info project-only" data-i18n="noVideo">動画が未読み込みです</span>
       <div class="spacer project-only"></div>
-      <label class="spec project-only">幅 <input id="out-w" type="number" min="8" step="8" value="128" /></label>
-      <label class="spec project-only">高さ <input id="out-h" type="number" min="1" step="1" value="64" /></label>
-      <label class="spec project-only">fps <input id="out-fps" type="number" min="1" step="1" value="15" /></label>
-      <button id="export-btn" class="primary project-only" disabled>エクスポート</button>
+      <label class="spec project-only"><span data-i18n="width">幅</span> <input id="out-w" type="number" min="8" step="8" value="128" /></label>
+      <label class="spec project-only"><span data-i18n="height">高さ</span> <input id="out-h" type="number" min="1" step="1" value="64" /></label>
+      <label class="spec project-only"><span data-i18n="fps">fps</span> <input id="out-fps" type="number" min="1" step="1" value="15" /></label>
+      <button id="export-btn" class="primary project-only" data-i18n="export" disabled>エクスポート</button>
       <div class="settings-wrap">
-        <button id="settings-btn" class="icon-btn" title="設定" aria-label="設定">⚙</button>
+        <button id="settings-btn" class="icon-btn" data-i18n-title="settings" title="設定" aria-label="設定">⚙</button>
         <div id="settings-menu" class="settings-menu" hidden>
-          <div class="settings-head">設定</div>
+          <div class="settings-head" data-i18n="settings">設定</div>
           <div class="settings-row">
-            <span>バージョン</span>
+            <span data-i18n="language">言語</span>
+            <select id="lang-select"></select>
+          </div>
+          <div class="settings-row">
+            <span data-i18n="version">バージョン</span>
             <span id="app-version" class="mono">—</span>
           </div>
         </div>
@@ -35,18 +39,18 @@
     <div id="start-hint" class="start-hint no-project-only">
       <div>
         <h1>TMG1 Studio</h1>
-        <p>「新規作成」で動画を読み込むか、「読み込み」で既存のプロジェクトを開いてください。</p>
+        <p data-i18n="startHint">「新規作成」で動画を読み込むか、「開く」で既存のプロジェクトを開いてください。</p>
       </div>
     </div>
 
     <main class="workspace project-only">
       <section class="preview-pane">
         <div class="pane-head">
-          <h2>プレビュー（monob 出力）</h2>
+          <h2 data-i18n="previewTitle">プレビュー（monob 出力）</h2>
           <label class="zoom-ctrl">
-            表示
+            <span data-i18n="zoomLabel">表示</span>
             <select id="zoom">
-              <option value="window">ウィンドウに合わせる</option>
+              <option value="window" data-i18n="zoomWindow">ウィンドウに合わせる</option>
               <option value="25">25%</option>
               <option value="50">50%</option>
               <option value="100">100%</option>
@@ -59,49 +63,49 @@
         <div class="preview-frame">
           <img id="preview-img" alt="preview" />
           <video id="preview-video" loop muted playsinline></video>
-          <p id="preview-placeholder" class="placeholder">動画を読み込むと、ここに 1bit プレビューが表示されます</p>
+          <p id="preview-placeholder" class="placeholder" data-i18n="previewPlaceholder">動画を読み込むと、ここに 1bit プレビューが表示されます</p>
         </div>
         <p id="preview-meta" class="meta"></p>
       </section>
 
       <aside class="params-pane">
-        <h2>区間パラメータ</h2>
+        <h2 data-i18n="paramsTitle">区間パラメータ</h2>
         <p id="seg-label" class="seg-label">—</p>
 
         <label class="param">
-          <span>コントラスト <b id="contrast-val">1.00</b></span>
+          <span><span data-i18n="contrast">コントラスト</span> <b id="contrast-val">1.00</b></span>
           <input id="contrast" type="range" min="0.5" max="2.0" step="0.01" value="1.0" disabled />
         </label>
 
         <label class="param">
-          <span>レベル下限 (黒潰し) <b id="lo-val">0</b></span>
+          <span><span data-i18n="levelLo">レベル下限 (黒潰し)</span> <b id="lo-val">0</b></span>
           <input id="level-lo" type="range" min="0" max="254" step="1" value="0" disabled />
         </label>
 
         <label class="param">
-          <span>レベル上限 (白飛ばし) <b id="hi-val">255</b></span>
+          <span><span data-i18n="levelHi">レベル上限 (白飛ばし)</span> <b id="hi-val">255</b></span>
           <input id="level-hi" type="range" min="1" max="255" step="1" value="255" disabled />
         </label>
 
         <label class="param">
-          <span>ディザ</span>
+          <span data-i18n="dither">ディザ</span>
           <select id="dither" disabled>
             <option value="bayer">Bayer</option>
-            <option value="ed">誤差拡散 (ed)</option>
-            <option value="none">なし</option>
+            <option value="ed" data-i18n="ditherEd">誤差拡散 (ed)</option>
+            <option value="none" data-i18n="ditherNone">なし</option>
           </select>
         </label>
 
         <div class="preset-section">
-          <h2>プリセット</h2>
+          <h2 data-i18n="presetsTitle">プリセット</h2>
           <div class="preset-row">
             <select id="preset-list"></select>
-            <button id="preset-apply">適用</button>
+            <button id="preset-apply" data-i18n="apply">適用</button>
           </div>
           <div class="preset-row">
-            <input id="preset-name" placeholder="プリセット名" />
-            <button id="preset-save">保存</button>
-            <button id="preset-delete" class="danger">削除</button>
+            <input id="preset-name" data-i18n-placeholder="presetNamePlaceholder" placeholder="プリセット名" />
+            <button id="preset-save" data-i18n="save">保存</button>
+            <button id="preset-delete" class="danger" data-i18n="delete">削除</button>
           </div>
         </div>
       </aside>
@@ -110,14 +114,14 @@
     <footer class="timeline-pane project-only">
       <div class="timeline-header">
         <button id="play-btn" class="primary" disabled>▶ 再生</button>
-        <button id="range-set-start" title="再生位置を範囲の始点に設定" disabled>始点に設定</button>
-        <button id="range-set-end" title="再生位置を範囲の終点に設定" disabled>終点に設定</button>
-        <button id="range-to-seg" disabled>区間を範囲に</button>
-        <button id="range-clear" title="範囲を全体に戻す" disabled>範囲解除</button>
+        <button id="range-set-start" data-i18n="setStart" data-i18n-title="setStartTitle" title="再生位置を範囲の始点に設定" disabled>始点に設定</button>
+        <button id="range-set-end" data-i18n="setEnd" data-i18n-title="setEndTitle" title="再生位置を範囲の終点に設定" disabled>終点に設定</button>
+        <button id="range-to-seg" data-i18n="rangeToSeg" disabled>区間を範囲に</button>
+        <button id="range-clear" data-i18n="rangeClear" data-i18n-title="rangeClearTitle" title="範囲を全体に戻す" disabled>範囲解除</button>
         <span id="time-readout" class="time-readout">00:00.00 / 00:00.00</span>
         <div class="spacer"></div>
-        <button id="split-btn" disabled>ここで分割</button>
-        <button id="delete-btn" disabled>区間を結合削除</button>
+        <button id="split-btn" data-i18n="split" disabled>ここで分割</button>
+        <button id="delete-btn" data-i18n="mergeDelete" disabled>区間を結合削除</button>
       </div>
       <div id="timeline" class="timeline"></div>
       <input id="scrub" class="scrub" type="range" min="0" max="1000" step="1" value="0" disabled />
@@ -128,9 +132,9 @@
       <div class="modal">
         <p id="confirm-msg" class="modal-msg">保存されていない変更があります。</p>
         <div class="modal-actions">
-          <button id="modal-save" class="primary">保存する</button>
-          <button id="modal-discard" class="danger">保存しない</button>
-          <button id="modal-cancel">キャンセル</button>
+          <button id="modal-save" class="primary" data-i18n="modalSave">保存する</button>
+          <button id="modal-discard" class="danger" data-i18n="modalDiscard">保存しない</button>
+          <button id="modal-cancel" data-i18n="cancel">キャンセル</button>
         </div>
       </div>
     </div>
