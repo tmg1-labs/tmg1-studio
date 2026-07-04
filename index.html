@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="stylesheet" href="/src/styles.css" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TMG1 Studio</title>
+    <script type="module" src="/src/main.ts" defer></script>
+  </head>
+
+  <body>
+    <header class="toolbar">
+      <button id="open-btn" class="primary">動画を開く</button>
+      <span id="file-info" class="file-info">動画が未読み込みです</span>
+      <div class="spacer"></div>
+      <label class="spec">幅 <input id="out-w" type="number" min="8" step="8" value="128" /></label>
+      <label class="spec">高さ <input id="out-h" type="number" min="1" step="1" value="64" /></label>
+      <label class="spec">fps <input id="out-fps" type="number" min="1" step="1" value="30" /></label>
+      <button id="export-btn" class="primary" disabled>エクスポート</button>
+    </header>
+
+    <main class="workspace">
+      <section class="preview-pane">
+        <h2>プレビュー（monob 出力）</h2>
+        <div class="preview-frame">
+          <img id="preview-img" alt="preview" />
+          <p id="preview-placeholder" class="placeholder">動画を読み込むとここに 1bit プレビューが出ますにゃ</p>
+        </div>
+        <p id="preview-meta" class="meta"></p>
+      </section>
+
+      <aside class="params-pane">
+        <h2>区間パラメータ</h2>
+        <p id="seg-label" class="seg-label">—</p>
+
+        <label class="param">
+          <span>コントラスト <b id="contrast-val">1.00</b></span>
+          <input id="contrast" type="range" min="0.5" max="2.0" step="0.01" value="1.0" disabled />
+        </label>
+
+        <label class="param">
+          <span>レベル下限 (黒潰し) <b id="lo-val">0</b></span>
+          <input id="level-lo" type="range" min="0" max="254" step="1" value="0" disabled />
+        </label>
+
+        <label class="param">
+          <span>レベル上限 (白飛ばし) <b id="hi-val">255</b></span>
+          <input id="level-hi" type="range" min="1" max="255" step="1" value="255" disabled />
+        </label>
+
+        <label class="param">
+          <span>ディザ</span>
+          <select id="dither" disabled>
+            <option value="bayer">Bayer</option>
+            <option value="ed">誤差拡散 (ed)</option>
+            <option value="none">なし</option>
+          </select>
+        </label>
+      </aside>
+    </main>
+
+    <footer class="timeline-pane">
+      <div class="timeline-header">
+        <span id="time-readout" class="time-readout">00:00.00 / 00:00.00</span>
+        <div class="spacer"></div>
+        <button id="split-btn" disabled>ここで分割</button>
+        <button id="delete-btn" disabled>区間を結合削除</button>
+      </div>
+      <div id="timeline" class="timeline"></div>
+      <input id="scrub" class="scrub" type="range" min="0" max="1000" step="1" value="0" disabled />
+      <p id="status" class="status"></p>
+    </footer>
+  </body>
+</html>
