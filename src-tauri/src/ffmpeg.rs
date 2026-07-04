@@ -2,7 +2,7 @@
 // 動画本体は webview には渡さず、パスだけを ffmpeg に渡してここで処理する
 // （そのため fs/asset プラグイン権限は不要）。
 
-use std::io::Write;
+use std::io::{BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
@@ -45,6 +45,11 @@ pub struct ExportResult {
 struct Progress {
     done: usize,
     total: usize,
+}
+
+#[derive(Clone, Serialize)]
+struct RangeProgress {
+    percent: u32,
 }
 
 /// `-r_frame_rate` 等の "30000/1001" 形式を f64 に変換。
@@ -200,6 +205,93 @@ fn slice_to_raw(
     Ok(())
 }
 
+/// slice_to_raw と同じだが、ffmpeg の `-progress pipe:1` を解析して
+/// 範囲全体（total_frames）に対する累積フレームから 0–100% を emit する。
+/// frames_before はこのスライス開始前までの累積フレーム数。
+#[allow(clippy::too_many_arguments)]
+fn slice_to_raw_progress(
+    app: &AppHandle,
+    input: &str,
+    chain: &Chain,
+    start: f64,
+    dur: f64,
+    fps: f64,
+    out: &Path,
+    frames_before: u64,
+    total_frames: u64,
+    last_pct: &mut i32,
+) -> Result<(), String> {
+    let mut child = Command::new("ffmpeg")
+        .args([
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-ss",
+            &start.to_string(),
+            "-i",
+            input,
+            "-t",
+            &dur.to_string(),
+            "-vf",
+            &chain.vf,
+            "-r",
+            &fps.to_string(),
+            "-f",
+            "rawvideo",
+            "-pix_fmt",
+            chain.pix_fmt,
+            "-sws_dither",
+            chain.sws_dither,
+            "-progress",
+            "pipe:1",
+            "-nostats",
+        ])
+        .arg(out)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("ffmpeg を実行できませんでした: {e}"))?;
+
+    let stdout = child.stdout.take().ok_or("stdout を取得できません")?;
+    // stderr はデッドロック防止のため別スレッドで吸い出す（失敗時のエラー本文用）。
+    let mut stderr = child.stderr.take().ok_or("stderr を取得できません")?;
+    let err_handle = std::thread::spawn(move || {
+        let mut s = String::new();
+        let _ = stderr.read_to_string(&mut s);
+        s
+    });
+
+    // `-progress` は key=value 行を出力する。frame= の値で進捗を算出。
+    for line in BufReader::new(stdout).lines() {
+        let line = match line {
+            Ok(l) => l,
+            Err(_) => break,
+        };
+        if let Some(rest) = line.strip_prefix("frame=") {
+            if let Ok(f) = rest.trim().parse::<u64>() {
+                let cum = frames_before + f;
+                let pct = if total_frames > 0 {
+                    ((cum * 100) / total_frames).min(100) as i32
+                } else {
+                    0
+                };
+                if pct != *last_pct {
+                    *last_pct = pct;
+                    let _ = app.emit("range-progress", RangeProgress { percent: pct as u32 });
+                }
+            }
+        }
+    }
+
+    let status = child.wait().map_err(|e| format!("ffmpeg 待機失敗: {e}"))?;
+    let errtext = err_handle.join().unwrap_or_default();
+    if !status.success() {
+        return Err(errtext);
+    }
+    Ok(())
+}
+
 /// 全区間を個別に monob raw 化 → 連結 → 目視用 mp4 を生成する。
 pub fn export(app: &AppHandle, p: &Project, out_path: &str) -> Result<ExportResult, String> {
     if p.width % 8 != 0 {
@@ -306,7 +398,7 @@ pub fn export(app: &AppHandle, p: &Project, out_path: &str) -> Result<ExportResu
 
 /// 再生範囲 [start, end) を区間ごとの設定で monob 化・連結し、ループ再生用の
 /// mp4 バイト列を返す。フロントは Blob URL にして `<video loop>` で再生する。
-pub fn render_range(p: &Project, start: f64, end: f64) -> Result<Vec<u8>, String> {
+pub fn render_range(app: &AppHandle, p: &Project, start: f64, end: f64) -> Result<Vec<u8>, String> {
     if p.width % 8 != 0 {
         return Err(format!(
             "幅 {} は 8 の倍数にしてください（monob のバイト境界のため）",
@@ -316,6 +408,21 @@ pub fn render_range(p: &Project, start: f64, end: f64) -> Result<Vec<u8>, String
     if end <= start {
         return Err("再生範囲が空です".to_string());
     }
+
+    // 進捗の分母: 範囲に重なる各スライスの推定フレーム数の合計。
+    let total_frames: u64 = p
+        .segments
+        .iter()
+        .filter_map(|seg| {
+            let s = seg.start_sec.max(start);
+            let e = seg.end_sec.min(end);
+            if e <= s + 1e-6 {
+                None
+            } else {
+                Some(((e - s) * p.fps).round() as u64)
+            }
+        })
+        .sum();
 
     // 同時実行やエクスポートと衝突しないよう、呼び出しごとに一意な一時フォルダを使う。
     let stamp = std::time::SystemTime::now()
@@ -330,6 +437,8 @@ pub fn render_range(p: &Project, start: f64, end: f64) -> Result<Vec<u8>, String
         std::fs::File::create(&raw_path).map_err(|e| format!("一時 raw 作成失敗: {e}"))?,
     );
     let mut total_bytes: u64 = 0;
+    let mut frames_before: u64 = 0;
+    let mut last_pct: i32 = -1;
 
     // 範囲に重なる区間を、区間ごとの chain でクランプしたスライスだけレンダリングして連結。
     for (i, seg) in p.segments.iter().enumerate() {
@@ -340,8 +449,20 @@ pub fn render_range(p: &Project, start: f64, end: f64) -> Result<Vec<u8>, String
         }
         let chain = build_chain(seg, p.width, p.height);
         let segfile = tmp.join(format!("s{i}.raw"));
-        slice_to_raw(&p.input_path, &chain, s, e - s, p.fps, &segfile)
-            .map_err(|err| format!("再生範囲のレンダリングに失敗: {err}"))?;
+        slice_to_raw_progress(
+            app,
+            &p.input_path,
+            &chain,
+            s,
+            e - s,
+            p.fps,
+            &segfile,
+            frames_before,
+            total_frames,
+            &mut last_pct,
+        )
+        .map_err(|err| format!("再生範囲のレンダリングに失敗: {err}"))?;
+        frames_before += ((e - s) * p.fps).round() as u64;
         let bytes = std::fs::read(&segfile).map_err(|err| format!("range raw 読み込み失敗: {err}"))?;
         total_bytes += bytes.len() as u64;
         writer
@@ -351,6 +472,8 @@ pub fn render_range(p: &Project, start: f64, end: f64) -> Result<Vec<u8>, String
     }
     writer.flush().map_err(|e| format!("range raw フラッシュ失敗: {e}"))?;
     drop(writer);
+    // デコード完了（mp4 化は短時間）。バーを 100% にしておく。
+    let _ = app.emit("range-progress", RangeProgress { percent: 100 });
 
     if total_bytes == 0 {
         let _ = std::fs::remove_dir_all(&tmp);

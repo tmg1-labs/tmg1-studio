@@ -34,12 +34,13 @@ async fn render_preview(
 /// 再生範囲をレンダリングし、ループ再生用 mp4 を ArrayBuffer（生バイト）で返す。
 #[tauri::command]
 async fn render_range(
+    app: tauri::AppHandle,
     project: Project,
     start_sec: f64,
     end_sec: f64,
 ) -> Result<tauri::ipc::Response, String> {
     let bytes = tauri::async_runtime::spawn_blocking(move || {
-        ffmpeg::render_range(&project, start_sec, end_sec)
+        ffmpeg::render_range(&app, &project, start_sec, end_sec)
     })
     .await
     .map_err(|e| format!("タスク実行失敗: {e}"))??;

@@ -64,6 +64,11 @@
           <img id="preview-img" alt="preview" />
           <video id="preview-video" loop muted playsinline></video>
           <p id="preview-placeholder" class="placeholder" data-i18n="previewPlaceholder">動画を読み込むと、ここに 1bit プレビューが表示されます</p>
+          <div id="render-progress" class="render-progress" hidden>
+            <span class="render-progress-label" data-i18n="rendering">再生用にレンダリング中…</span>
+            <div class="render-progress-track"><div id="render-progress-fill" class="render-progress-fill"></div></div>
+            <span id="render-progress-pct" class="render-progress-pct">0%</span>
+          </div>
         </div>
         <p id="preview-meta" class="meta"></p>
       </section>

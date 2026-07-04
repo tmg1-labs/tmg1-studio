@@ -220,6 +220,54 @@ h2 {
   padding: 1rem;
 }
 
+/* 再生用レンダリングの進捗バー（プレビュー上のオーバーレイ） */
+.render-progress {
+  position: absolute;
+  left: 50%;
+  bottom: 1rem;
+  transform: translateX(-50%);
+  width: min(80%, 360px);
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 0.75rem;
+  background: rgba(20, 21, 28, 0.85);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-size: 0.78rem;
+  color: var(--fg);
+}
+
+.render-progress[hidden] {
+  display: none;
+}
+
+.render-progress-label {
+  white-space: nowrap;
+  color: var(--muted);
+}
+
+.render-progress-track {
+  flex: 1;
+  height: 6px;
+  background: var(--panel-2);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.render-progress-fill {
+  width: 0%;
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.12s linear;
+}
+
+.render-progress-pct {
+  font-variant-numeric: tabular-nums;
+  min-width: 3ch;
+  text-align: right;
+}
+
 .meta {
   margin: 0.5rem 0 0;
   font-size: 0.78rem;

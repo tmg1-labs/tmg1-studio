@@ -126,6 +126,9 @@ const previewImg = $("preview-img") as HTMLImageElement;
 const previewVideo = $("preview-video") as HTMLVideoElement;
 const previewPlaceholder = $("preview-placeholder");
 const previewMeta = $("preview-meta");
+const renderProgress = $("render-progress");
+const renderProgressFill = $("render-progress-fill");
+const renderProgressPct = $("render-progress-pct");
 const zoomEl = $("zoom") as HTMLSelectElement;
 const playBtn = $("play-btn") as HTMLButtonElement;
 const rangeToSegBtn = $("range-to-seg") as HTMLButtonElement;
@@ -840,6 +843,25 @@ function revokeUrl() {
   }
 }
 
+// 再生用レンダリングの進捗バー。
+function setRenderProgress(pct: number) {
+  const p = Math.max(0, Math.min(100, Math.round(pct)));
+  renderProgressFill.style.width = `${p}%`;
+  renderProgressPct.textContent = `${p}%`;
+}
+function showRenderProgress() {
+  setRenderProgress(0);
+  renderProgress.hidden = false;
+}
+function hideRenderProgress() {
+  renderProgress.hidden = true;
+}
+
+// backend の range-progress イベント（0–100%）。
+listen<{ percent: number }>("range-progress", (ev) => {
+  setRenderProgress(ev.payload.percent);
+});
+
 // 再生位置を playhead に追従させる（rAF で軽量更新。renderTimeline やプレビュー
 // 再スケジュールは呼ばない＝再生を止めない）。mp4 は範囲先頭を 0 とするので
 // 実時刻 = playStart + video.currentTime。
@@ -892,6 +914,7 @@ async function startPlayback() {
   }
   playBtn.disabled = true;
   setStatus(t("rendering"));
+  showRenderProgress();
   try {
     const project = {
       input_path: state.inputPath,
@@ -924,6 +947,7 @@ async function startPlayback() {
   } catch (e) {
     setStatus(String(e), true);
   } finally {
+    hideRenderProgress();
     playBtn.disabled = false;
   }
 }
