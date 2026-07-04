@@ -55,8 +55,9 @@
   installer 用に tauri.conf.json / Cargo.toml の version もタグへ同期する構成にする。
 - GitHub リモート作成 + 初回 push。
 - 未検討: 「名前を付けて保存」（別名保存）、tmg1 エンコードパラメータの GUI 露出（現状は CLI 既定固定。
-  coder/rice-mode/scd/vfr/key-int 等）、組み込みプリセット名の翻訳（現状は永続データ都合で非翻訳の
-  英語名。内部キー＋表示名翻訳へ移行が必要）。
+  coder/rice-mode/scd/vfr/key-int 等）。
+- **見送り**: 組み込みプリセット名の翻訳（2026-07-05 ユーザー判断で不要）。現状の非翻訳・英語名固定の
+  ままとする（永続データとの不整合を避けるため、内部キー＋表示名翻訳への移行はしない）。
 
 ## 参考
 - パイプライン全体像・関連リポジトリは `CLAUDE.md` / `architecture.md` を参照。
