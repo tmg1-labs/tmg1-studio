@@ -2,6 +2,10 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { load, type Store } from "@tauri-apps/plugin-store";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+
+// Vite の define で埋め込まれる表示バージョン（VITE_APP_VERSION → package.json）。
+declare const __APP_VERSION__: string;
 
 // ---- 型（Rust 側 serde と対応）----
 type Dither = "none" | "bayer" | "ed";
@@ -76,6 +80,7 @@ const state = {
 
 let objectUrl: string | null = null; // 再生中の Blob URL
 let projectPath: string | null = null; // 現在のプロジェクトファイル(.tmgproj)のパス
+let dirty = false; // 未保存の変更があるか
 let followRaf: number | null = null; // 再生位置追従の rAF ハンドル
 let seeking = false; // スクラブでシーク操作中（追従の上書きを抑止）
 
@@ -94,6 +99,14 @@ const loadBtn = $("load-btn") as HTMLButtonElement;
 const saveBtn = $("save-btn") as HTMLButtonElement;
 const closeBtn = $("close-btn") as HTMLButtonElement;
 const exportBtn = $("export-btn") as HTMLButtonElement;
+const settingsBtn = $("settings-btn") as HTMLButtonElement;
+const settingsMenu = $("settings-menu");
+const appVersionEl = $("app-version");
+const confirmModal = $("confirm-modal");
+const confirmMsgEl = $("confirm-msg");
+const modalSaveBtn = $("modal-save") as HTMLButtonElement;
+const modalDiscardBtn = $("modal-discard") as HTMLButtonElement;
+const modalCancelBtn = $("modal-cancel") as HTMLButtonElement;
 const splitBtn = $("split-btn") as HTMLButtonElement;
 const deleteBtn = $("delete-btn") as HTMLButtonElement;
 const fileInfo = $("file-info");
@@ -159,6 +172,11 @@ function clamp(v: number, lo: number, hi: number): number {
   return Math.min(hi, Math.max(lo, v));
 }
 
+// 保存対象（区間・パラメータ・範囲・出力設定）を編集したら未保存フラグを立てる。
+function markDirty() {
+  dirty = true;
+}
+
 // 入力パスと ffprobe 情報から編集状態をセットアップする。
 // loaded を渡すとプロジェクト読込（区間・範囲・出力設定を復元）、無ければ新規
 // （単一区間・範囲全体・出力設定は現在の UI 値のまま = fps 既定 15）。
@@ -222,6 +240,7 @@ function applyProject(
   renderTimeline();
   syncParamInputs();
   schedulePreview();
+  dirty = false; // 読み込み直後は未変更
 }
 
 // 保存ボタンのラベル: 未保存の新規は「保存」、保存先が確定していれば「上書き」。
@@ -250,8 +269,51 @@ async function openVideo() {
   }
 }
 
+// 3択の確認モーダル（保存する / 保存しない / キャンセル）。
+type DiscardChoice = "save" | "discard" | "cancel";
+let modalResolve: ((c: DiscardChoice) => void) | null = null;
+
+function askUnsaved(message: string): Promise<DiscardChoice> {
+  confirmMsgEl.textContent = message;
+  confirmModal.hidden = false;
+  return new Promise((resolve) => {
+    modalResolve = resolve;
+  });
+}
+
+function resolveModal(choice: DiscardChoice) {
+  confirmModal.hidden = true;
+  const r = modalResolve;
+  modalResolve = null;
+  if (r) r(choice);
+}
+
+modalSaveBtn.addEventListener("click", () => resolveModal("save"));
+modalDiscardBtn.addEventListener("click", () => resolveModal("discard"));
+modalCancelBtn.addEventListener("click", () => resolveModal("cancel"));
+// オーバーレイ外側クリック / Esc はキャンセル扱い。
+confirmModal.addEventListener("click", (e) => {
+  if (e.target === confirmModal) resolveModal("cancel");
+});
+document.addEventListener("keydown", (e) => {
+  if (!confirmModal.hidden && e.key === "Escape") resolveModal("cancel");
+});
+
+// 未保存なら確認する（true=続行してよい）。「保存する」を選んだ場合は保存を試み、
+// 保存が成功したら続行、キャンセル/失敗なら中断する。
+async function confirmUnsaved(message: string): Promise<boolean> {
+  if (!dirty) return true;
+  const choice = await askUnsaved(message);
+  if (choice === "cancel") return false;
+  if (choice === "save") return await onSaveClick();
+  return true; // discard
+}
+
 // プロジェクトを閉じて起動時の状態へ戻す。
-function closeProject() {
+async function closeProject() {
+  if (!(await confirmUnsaved("保存されていない変更があります。プロジェクトを閉じますか？"))) {
+    return;
+  }
   stopPlayback();
   state.inputPath = null;
   state.segments = [];
@@ -260,6 +322,7 @@ function closeProject() {
   state.playStart = 0;
   state.playEnd = 0;
   projectPath = null;
+  dirty = false;
   previewImg.style.display = "none";
   previewImg.removeAttribute("src");
   fileInfo.textContent = "動画が未読み込みです";
@@ -288,28 +351,34 @@ async function writeProject(target: string) {
 }
 
 // 「保存/上書き」ボタン: 保存先が確定していれば上書き、無ければ保存ダイアログ。
-async function onSaveClick() {
+// 戻り値 = 保存できたか（ダイアログをキャンセル or 失敗なら false）。
+async function onSaveClick(): Promise<boolean> {
   if (!state.inputPath) {
     setStatus("先に動画を読み込んでください", true);
-    return;
+    return false;
   }
   try {
     if (projectPath) {
       await writeProject(projectPath);
+      dirty = false;
       setStatus(`上書き保存しました: ${projectPath}`);
+      return true;
     } else {
       const target = await save({
         defaultPath: "project.tmgproj",
         filters: [{ name: "TMG1 Studio プロジェクト", extensions: ["tmgproj"] }],
       });
-      if (!target) return;
+      if (!target) return false;
       await writeProject(target);
       projectPath = target;
+      dirty = false;
       updateSaveLabel(); // 以後は「上書き」
       setStatus(`プロジェクトを保存しました: ${target}`);
+      return true;
     }
   } catch (e) {
     setStatus(`保存失敗: ${e}`, true);
+    return false;
   }
 }
 
@@ -474,6 +543,7 @@ function startRangeDrag(e: MouseEvent, which: "start" | "end") {
   const onUp = () => {
     window.removeEventListener("mousemove", onMove);
     window.removeEventListener("mouseup", onUp);
+    markDirty();
   };
   window.addEventListener("mousemove", onMove);
   window.addEventListener("mouseup", onUp);
@@ -502,6 +572,7 @@ function startBoundaryDrag(e: MouseEvent, rightIdx: number) {
     window.removeEventListener("mouseup", onUp);
     syncParamInputs();
     schedulePreview();
+    markDirty();
   };
   window.addEventListener("mousemove", onMove);
   window.addEventListener("mouseup", onUp);
@@ -559,6 +630,7 @@ splitBtn.addEventListener("click", () => {
   state.segments.splice(idx + 1, 0, right);
   renderTimeline();
   syncParamInputs();
+  markDirty();
   setStatus(`区間を分割しました（計 ${state.segments.length}）`);
 });
 
@@ -577,6 +649,7 @@ deleteBtn.addEventListener("click", () => {
   state.segments.splice(idx, 1);
   renderTimeline();
   syncParamInputs();
+  markDirty();
   setStatus(`区間を結合削除しました（計 ${state.segments.length}）`);
 });
 
@@ -608,6 +681,7 @@ contrastEl.addEventListener("input", () => {
   if (!seg) return;
   seg.contrast = Number(contrastEl.value);
   contrastVal.textContent = seg.contrast.toFixed(2);
+  markDirty();
   schedulePreview();
 });
 
@@ -619,6 +693,7 @@ loEl.addEventListener("input", () => {
   seg.level_lo = lo;
   loEl.value = String(lo);
   loVal.textContent = String(lo);
+  markDirty();
   schedulePreview();
 });
 
@@ -630,6 +705,7 @@ hiEl.addEventListener("input", () => {
   seg.level_hi = hi;
   hiEl.value = String(hi);
   hiVal.textContent = String(hi);
+  markDirty();
   schedulePreview();
 });
 
@@ -637,12 +713,16 @@ ditherEl.addEventListener("change", () => {
   const seg = currentSegment();
   if (!seg) return;
   seg.dither = ditherEl.value as Dither;
+  markDirty();
   schedulePreview();
 });
 
 // 出力サイズ変更でもプレビューし直す。
 [outW, outH, outFps].forEach((el) =>
-  el.addEventListener("change", () => schedulePreview()),
+  el.addEventListener("change", () => {
+    markDirty();
+    schedulePreview();
+  }),
 );
 
 // ---- プレビュー（デバウンス）----
@@ -825,6 +905,7 @@ rangeToSegBtn.addEventListener("click", () => {
   state.playStart = seg.start_sec;
   state.playEnd = seg.end_sec;
   renderTimeline();
+  markDirty();
   setStatus(`再生範囲を区間 #${currentIndex() + 1} に設定`);
 });
 
@@ -835,6 +916,7 @@ function afterRangeEdited() {
     runPreview();
   }
   renderTimeline();
+  markDirty();
 }
 
 // 再生位置（playhead）を範囲の始点に設定。
@@ -963,6 +1045,7 @@ presetApplyBtn.addEventListener("click", () => {
   seg.level_hi = p.level_hi;
   seg.dither = p.dither;
   syncParamInputs();
+  markDirty();
   schedulePreview();
   setStatus(`プリセット「${p.name}」を区間 #${currentIndex() + 1} に適用`);
 });
@@ -1007,10 +1090,34 @@ presetDeleteBtn.addEventListener("click", async () => {
   setStatus(`プリセット「${name}」を削除`);
 });
 
+// ---- 設定メニュー（歯車）----
+appVersionEl.textContent = `v${__APP_VERSION__}`;
+
+settingsBtn.addEventListener("click", (e) => {
+  e.stopPropagation();
+  settingsMenu.hidden = !settingsMenu.hidden;
+});
+// メニュー外クリックで閉じる。
+document.addEventListener("click", (e) => {
+  if (!settingsMenu.hidden && !settingsMenu.contains(e.target as Node)) {
+    settingsMenu.hidden = true;
+  }
+});
+
+// アプリ終了（ウィンドウを閉じる）時: 未保存なら確認。
+// 保存する/保存しない→終了、キャンセル→終了を止める。
+getCurrentWindow().onCloseRequested(async (event) => {
+  if (!dirty) return;
+  const proceed = await confirmUnsaved(
+    "保存されていない変更があります。アプリを終了しますか？",
+  );
+  if (!proceed) event.preventDefault();
+});
+
 // ---- 初期化 ----
 newBtn.addEventListener("click", openVideo);
 loadBtn.addEventListener("click", loadProject);
 saveBtn.addEventListener("click", onSaveClick);
 closeBtn.addEventListener("click", closeProject);
-setStatus("「新規作成」または「読み込み」から始めてください");
+setStatus("「新規作成」または「開く」から始めてください");
 initPresets();

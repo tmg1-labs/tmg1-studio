@@ -46,6 +46,8 @@ body:not(.no-project) .no-project-only {
 
 .start-hint h1 {
   font-size: 4.5rem;
+  font-family: 'Impact', sans-serif;
+  font-weight: 200;
   margin: 0 0 0.6rem;
 }
 
@@ -76,6 +78,56 @@ h2 {
 
 .spacer {
   flex: 1;
+}
+
+/* 設定（歯車）メニュー。常に右端に置く。 */
+.settings-wrap {
+  position: relative;
+  margin-left: auto;
+}
+
+.icon-btn {
+  padding: 0.3rem 0.5rem;
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+.settings-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  min-width: 220px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.6rem 0.8rem;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  z-index: 20;
+}
+
+.settings-menu[hidden] {
+  display: none;
+}
+
+.settings-head {
+  font-size: 0.75rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 0.5rem;
+}
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  font-size: 0.85rem;
+}
+
+.mono {
+  font-variant-numeric: tabular-nums;
+  color: var(--fg);
 }
 
 .file-info {
@@ -412,4 +464,41 @@ button:disabled {
 
 .status.error {
   color: #ff8088;
+}
+
+/* ---- 確認モーダル ---- */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.modal-overlay[hidden] {
+  display: none;
+}
+
+.modal {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 1.2rem 1.4rem;
+  max-width: 440px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+}
+
+.modal-msg {
+  margin: 0 0 1.1rem;
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+  flex-wrap: wrap;
 }

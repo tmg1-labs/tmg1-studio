@@ -11,15 +11,25 @@
   <body class="no-project">
     <header class="toolbar">
       <button id="new-btn" class="primary no-project-only">新規作成</button>
-      <button id="load-btn" class="no-project-only">読み込み</button>
+      <button id="load-btn" class="no-project-only">開く</button>
       <button id="save-btn" class="project-only">保存</button>
-      <button id="close-btn" class="project-only">プロジェクトを閉じる</button>
+      <button id="close-btn" class="project-only">閉じる</button>
       <span id="file-info" class="file-info project-only">動画が未読み込みです</span>
       <div class="spacer project-only"></div>
       <label class="spec project-only">幅 <input id="out-w" type="number" min="8" step="8" value="128" /></label>
       <label class="spec project-only">高さ <input id="out-h" type="number" min="1" step="1" value="64" /></label>
       <label class="spec project-only">fps <input id="out-fps" type="number" min="1" step="1" value="15" /></label>
       <button id="export-btn" class="primary project-only" disabled>エクスポート</button>
+      <div class="settings-wrap">
+        <button id="settings-btn" class="icon-btn" title="設定" aria-label="設定">⚙</button>
+        <div id="settings-menu" class="settings-menu" hidden>
+          <div class="settings-head">設定</div>
+          <div class="settings-row">
+            <span>バージョン</span>
+            <span id="app-version" class="mono">—</span>
+          </div>
+        </div>
+      </div>
     </header>
 
     <div id="start-hint" class="start-hint no-project-only">
@@ -113,5 +123,16 @@
       <input id="scrub" class="scrub" type="range" min="0" max="1000" step="1" value="0" disabled />
       <p id="status" class="status"></p>
     </footer>
+
+    <div id="confirm-modal" class="modal-overlay" hidden>
+      <div class="modal">
+        <p id="confirm-msg" class="modal-msg">保存されていない変更があります。</p>
+        <div class="modal-actions">
+          <button id="modal-save" class="primary">保存する</button>
+          <button id="modal-discard" class="danger">保存しない</button>
+          <button id="modal-cancel">キャンセル</button>
+        </div>
+      </div>
+    </div>
   </body>
 </html>
