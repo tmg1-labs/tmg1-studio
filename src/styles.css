@@ -19,11 +19,40 @@
 body {
   margin: 0;
   height: 100vh;
-  display: grid;
-  grid-template-rows: auto 1fr auto;
+  display: flex;
+  flex-direction: column;
   background: var(--bg);
   color: var(--fg);
   overflow: hidden;
+}
+
+/* プロジェクト状態による表示切替 */
+body.no-project .project-only {
+  display: none !important;
+}
+body:not(.no-project) .no-project-only {
+  display: none !important;
+}
+
+/* 起動時（プロジェクト未読み込み）の案内 */
+.start-hint {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 2rem;
+}
+
+.start-hint h1 {
+  font-size: 4.5rem;
+  margin: 0 0 0.6rem;
+}
+
+.start-hint p {
+  color: var(--muted);
+  margin: 0;
+  max-width: 40ch;
 }
 
 h2 {
@@ -72,6 +101,7 @@ h2 {
 
 /* ---- workspace ---- */
 .workspace {
+  flex: 1;
   display: grid;
   grid-template-columns: 1fr 300px;
   gap: 0.9rem;

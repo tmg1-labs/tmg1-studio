@@ -8,18 +8,28 @@
     <script type="module" src="/src/main.ts" defer></script>
   </head>
 
-  <body>
+  <body class="no-project">
     <header class="toolbar">
-      <button id="open-btn" class="primary">動画を開く</button>
-      <span id="file-info" class="file-info">動画が未読み込みです</span>
-      <div class="spacer"></div>
-      <label class="spec">幅 <input id="out-w" type="number" min="8" step="8" value="128" /></label>
-      <label class="spec">高さ <input id="out-h" type="number" min="1" step="1" value="64" /></label>
-      <label class="spec">fps <input id="out-fps" type="number" min="1" step="1" value="30" /></label>
-      <button id="export-btn" class="primary" disabled>エクスポート</button>
+      <button id="new-btn" class="primary no-project-only">新規作成</button>
+      <button id="load-btn" class="no-project-only">読み込み</button>
+      <button id="save-btn" class="project-only">保存</button>
+      <button id="close-btn" class="project-only">プロジェクトを閉じる</button>
+      <span id="file-info" class="file-info project-only">動画が未読み込みです</span>
+      <div class="spacer project-only"></div>
+      <label class="spec project-only">幅 <input id="out-w" type="number" min="8" step="8" value="128" /></label>
+      <label class="spec project-only">高さ <input id="out-h" type="number" min="1" step="1" value="64" /></label>
+      <label class="spec project-only">fps <input id="out-fps" type="number" min="1" step="1" value="15" /></label>
+      <button id="export-btn" class="primary project-only" disabled>エクスポート</button>
     </header>
 
-    <main class="workspace">
+    <div id="start-hint" class="start-hint no-project-only">
+      <div>
+        <h1>TMG1 Studio</h1>
+        <p>「新規作成」で動画を読み込むか、「読み込み」で既存のプロジェクトを開いてください。</p>
+      </div>
+    </div>
+
+    <main class="workspace project-only">
       <section class="preview-pane">
         <div class="pane-head">
           <h2>プレビュー（monob 出力）</h2>
@@ -87,7 +97,7 @@
       </aside>
     </main>
 
-    <footer class="timeline-pane">
+    <footer class="timeline-pane project-only">
       <div class="timeline-header">
         <button id="play-btn" class="primary" disabled>▶ 再生</button>
         <button id="range-set-start" title="再生位置を範囲の始点に設定" disabled>始点に設定</button>

@@ -29,6 +29,18 @@ interface ExportResult {
   frames: number;
 }
 
+// 保存する編集プロジェクトの形（.tmgproj = JSON）。
+interface ProjectFile {
+  version: number;
+  input_path: string;
+  width: number;
+  height: number;
+  fps: number;
+  segments: Segment[];
+  play_start: number;
+  play_end: number;
+}
+
 // 区間パラメータのプリセット（tauri-plugin-store で永続化）。
 interface Preset {
   name: string;
@@ -63,6 +75,7 @@ const state = {
 };
 
 let objectUrl: string | null = null; // 再生中の Blob URL
+let projectPath: string | null = null; // 現在のプロジェクトファイル(.tmgproj)のパス
 let followRaf: number | null = null; // 再生位置追従の rAF ハンドル
 let seeking = false; // スクラブでシーク操作中（追従の上書きを抑止）
 
@@ -76,7 +89,10 @@ function newSegId(): string {
 const $ = <T extends HTMLElement = HTMLElement>(id: string): T =>
   document.getElementById(id) as T;
 
-const openBtn = $("open-btn") as HTMLButtonElement;
+const newBtn = $("new-btn") as HTMLButtonElement;
+const loadBtn = $("load-btn") as HTMLButtonElement;
+const saveBtn = $("save-btn") as HTMLButtonElement;
+const closeBtn = $("close-btn") as HTMLButtonElement;
 const exportBtn = $("export-btn") as HTMLButtonElement;
 const splitBtn = $("split-btn") as HTMLButtonElement;
 const deleteBtn = $("delete-btn") as HTMLButtonElement;
@@ -139,7 +155,81 @@ function currentSegment(): Segment | null {
   return state.segments[currentIndex()] ?? null;
 }
 
-// ---- 動画読み込み ----
+function clamp(v: number, lo: number, hi: number): number {
+  return Math.min(hi, Math.max(lo, v));
+}
+
+// 入力パスと ffprobe 情報から編集状態をセットアップする。
+// loaded を渡すとプロジェクト読込（区間・範囲・出力設定を復元）、無ければ新規
+// （単一区間・範囲全体・出力設定は現在の UI 値のまま = fps 既定 15）。
+function applyProject(
+  path: string,
+  info: VideoInfo,
+  loaded?: {
+    segments: Segment[];
+    playStart: number;
+    playEnd: number;
+    width: number;
+    height: number;
+    fps: number;
+  },
+) {
+  state.inputPath = path;
+  state.duration = info.duration;
+  state.inputFps = info.fps;
+  state.inputW = info.width;
+  state.inputH = info.height;
+  state.playhead = 0;
+
+  segCounter = 0;
+  if (loaded) {
+    outW.value = String(loaded.width);
+    outH.value = String(loaded.height);
+    outFps.value = String(loaded.fps);
+    // 区間の id は内部用なので振り直して衝突を防ぐ。範囲は尺内にクランプ。
+    state.segments = loaded.segments.map((s) => ({ ...s, id: newSegId() }));
+    state.playStart = clamp(loaded.playStart, 0, info.duration);
+    state.playEnd = clamp(loaded.playEnd, 0, info.duration);
+  } else {
+    state.segments = [makeSegment(0, info.duration)];
+    state.playStart = 0;
+    state.playEnd = info.duration;
+  }
+  stopPlayback();
+
+  const name = path.split(/[\\/]/).pop() ?? path;
+  fileInfo.textContent = `${name}  (${info.width}x${info.height}, ${info.fps.toFixed(2)}fps, ${fmtTime(
+    info.duration,
+  )})`;
+
+  scrubEl.disabled = false;
+  scrubEl.value = "0";
+  setParamsEnabled(true);
+  exportBtn.disabled = false;
+  splitBtn.disabled = false;
+  deleteBtn.disabled = false;
+  playBtn.disabled = false;
+  rangeToSegBtn.disabled = false;
+  rangeSetStartBtn.disabled = false;
+  rangeSetEndBtn.disabled = false;
+  rangeClearBtn.disabled = false;
+  previewPlaceholder.style.display = "none";
+
+  // プロジェクトを開いた状態へ（新規/読込ボタンを隠し、保存/閉じるを表示）。
+  document.body.classList.remove("no-project");
+  updateSaveLabel();
+
+  renderTimeline();
+  syncParamInputs();
+  schedulePreview();
+}
+
+// 保存ボタンのラベル: 未保存の新規は「保存」、保存先が確定していれば「上書き」。
+function updateSaveLabel() {
+  saveBtn.textContent = projectPath ? "上書き" : "保存";
+}
+
+// ---- 新規作成（動画読み込みを兼ねる）----
 async function openVideo() {
   const selected = await open({
     multiple: false,
@@ -152,47 +242,104 @@ async function openVideo() {
   setStatus("ffprobe で解析中…");
   try {
     const info = await invoke<VideoInfo>("probe_video", { path: selected });
-    state.inputPath = selected;
-    state.duration = info.duration;
-    state.inputFps = info.fps;
-    state.inputW = info.width;
-    state.inputH = info.height;
-    state.playhead = 0;
-
-    // 出力 fps の初期値は入力 fps の四捨五入。サイズは 128x64 既定のまま。
-    if (info.fps > 0) outFps.value = String(Math.round(info.fps));
-
-    // 単一区間で初期化。再生範囲は全体。
-    segCounter = 0;
-    state.segments = [makeSegment(0, info.duration)];
-    state.playStart = 0;
-    state.playEnd = info.duration;
-    stopPlayback();
-
-    const name = selected.split(/[\\/]/).pop() ?? selected;
-    fileInfo.textContent = `${name}  (${info.width}x${info.height}, ${info.fps.toFixed(2)}fps, ${fmtTime(
-      info.duration,
-    )})`;
-
-    scrubEl.disabled = false;
-    scrubEl.value = "0";
-    setParamsEnabled(true);
-    exportBtn.disabled = false;
-    splitBtn.disabled = false;
-    deleteBtn.disabled = false;
-    playBtn.disabled = false;
-    rangeToSegBtn.disabled = false;
-    rangeSetStartBtn.disabled = false;
-    rangeSetEndBtn.disabled = false;
-    rangeClearBtn.disabled = false;
-    previewPlaceholder.style.display = "none";
-
-    renderTimeline();
-    syncParamInputs();
+    projectPath = null; // 新規はまだ保存先なし → ボタンは「保存」
+    applyProject(selected, info);
     setStatus("読み込み完了");
-    schedulePreview();
   } catch (e) {
     setStatus(String(e), true);
+  }
+}
+
+// プロジェクトを閉じて起動時の状態へ戻す。
+function closeProject() {
+  stopPlayback();
+  state.inputPath = null;
+  state.segments = [];
+  state.duration = 0;
+  state.playhead = 0;
+  state.playStart = 0;
+  state.playEnd = 0;
+  projectPath = null;
+  previewImg.style.display = "none";
+  previewImg.removeAttribute("src");
+  fileInfo.textContent = "動画が未読み込みです";
+  document.body.classList.add("no-project");
+  setStatus("プロジェクトを閉じました");
+}
+
+// ---- プロジェクト保存 / 読込 ----
+// 指定パスへ現在のプロジェクトを書き出す。
+async function writeProject(target: string) {
+  if (!state.inputPath) return;
+  const data: ProjectFile = {
+    version: 1,
+    input_path: state.inputPath,
+    width: Number(outW.value),
+    height: Number(outH.value),
+    fps: Number(outFps.value),
+    segments: state.segments,
+    play_start: state.playStart,
+    play_end: state.playEnd,
+  };
+  await invoke("save_project", {
+    path: target,
+    contents: JSON.stringify(data, null, 2),
+  });
+}
+
+// 「保存/上書き」ボタン: 保存先が確定していれば上書き、無ければ保存ダイアログ。
+async function onSaveClick() {
+  if (!state.inputPath) {
+    setStatus("先に動画を読み込んでください", true);
+    return;
+  }
+  try {
+    if (projectPath) {
+      await writeProject(projectPath);
+      setStatus(`上書き保存しました: ${projectPath}`);
+    } else {
+      const target = await save({
+        defaultPath: "project.tmgproj",
+        filters: [{ name: "TMG1 Studio プロジェクト", extensions: ["tmgproj"] }],
+      });
+      if (!target) return;
+      await writeProject(target);
+      projectPath = target;
+      updateSaveLabel(); // 以後は「上書き」
+      setStatus(`プロジェクトを保存しました: ${target}`);
+    }
+  } catch (e) {
+    setStatus(`保存失敗: ${e}`, true);
+  }
+}
+
+async function loadProject() {
+  const selected = await open({
+    multiple: false,
+    filters: [{ name: "TMG1 Studio プロジェクト", extensions: ["tmgproj", "json"] }],
+  });
+  if (!selected || typeof selected !== "string") return;
+  setStatus("プロジェクトを読み込み中…");
+  try {
+    const text = await invoke<string>("load_project", { path: selected });
+    const data = JSON.parse(text) as ProjectFile;
+    if (!data || !Array.isArray(data.segments) || !data.input_path) {
+      throw new Error("プロジェクト形式が不正です");
+    }
+    // 参照している入力動画を再解析（尺・サイズ・fps を取得。存在確認も兼ねる）。
+    const info = await invoke<VideoInfo>("probe_video", { path: data.input_path });
+    projectPath = selected; // 既存プロジェクト → ボタンは「上書き」
+    applyProject(data.input_path, info, {
+      segments: data.segments,
+      playStart: data.play_start ?? 0,
+      playEnd: data.play_end ?? info.duration,
+      width: data.width,
+      height: data.height,
+      fps: data.fps,
+    });
+    setStatus(`プロジェクトを読み込みました: ${selected}`);
+  } catch (e) {
+    setStatus(`プロジェクト読み込み失敗: ${e}`, true);
   }
 }
 
@@ -861,6 +1008,9 @@ presetDeleteBtn.addEventListener("click", async () => {
 });
 
 // ---- 初期化 ----
-openBtn.addEventListener("click", openVideo);
-setStatus("「動画を開く」から始めてください");
+newBtn.addEventListener("click", openVideo);
+loadBtn.addEventListener("click", loadProject);
+saveBtn.addEventListener("click", onSaveClick);
+closeBtn.addEventListener("click", closeProject);
+setStatus("「新規作成」または「読み込み」から始めてください");
 initPresets();

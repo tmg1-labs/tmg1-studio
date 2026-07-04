@@ -46,6 +46,18 @@ async fn render_range(
     Ok(tauri::ipc::Response::new(bytes))
 }
 
+/// 編集プロジェクト（JSON 文字列）をファイルに保存する。
+#[tauri::command]
+fn save_project(path: String, contents: String) -> Result<(), String> {
+    std::fs::write(&path, contents).map_err(|e| format!("プロジェクト保存に失敗: {e}"))
+}
+
+/// 編集プロジェクト（JSON 文字列）をファイルから読み込む。
+#[tauri::command]
+fn load_project(path: String) -> Result<String, String> {
+    std::fs::read_to_string(&path).map_err(|e| format!("プロジェクト読み込みに失敗: {e}"))
+}
+
 /// プロジェクトをエクスポート（monob raw + 目視用 mp4）。
 #[tauri::command]
 async fn export(
@@ -68,7 +80,9 @@ pub fn run() {
             probe_video,
             render_preview,
             render_range,
-            export
+            export,
+            save_project,
+            load_project
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
