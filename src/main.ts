@@ -91,6 +91,9 @@ const previewMeta = $("preview-meta");
 const zoomEl = $("zoom") as HTMLSelectElement;
 const playBtn = $("play-btn") as HTMLButtonElement;
 const rangeToSegBtn = $("range-to-seg") as HTMLButtonElement;
+const rangeSetStartBtn = $("range-set-start") as HTMLButtonElement;
+const rangeSetEndBtn = $("range-set-end") as HTMLButtonElement;
+const rangeClearBtn = $("range-clear") as HTMLButtonElement;
 const segLabel = $("seg-label");
 const contrastEl = $("contrast") as HTMLInputElement;
 const loEl = $("level-lo") as HTMLInputElement;
@@ -179,6 +182,9 @@ async function openVideo() {
     deleteBtn.disabled = false;
     playBtn.disabled = false;
     rangeToSegBtn.disabled = false;
+    rangeSetStartBtn.disabled = false;
+    rangeSetEndBtn.disabled = false;
+    rangeClearBtn.disabled = false;
     previewPlaceholder.style.display = "none";
 
     renderTimeline();
@@ -673,6 +679,40 @@ rangeToSegBtn.addEventListener("click", () => {
   state.playEnd = seg.end_sec;
   renderTimeline();
   setStatus(`再生範囲を区間 #${currentIndex() + 1} に設定`);
+});
+
+// 範囲を編集したときの共通後処理（再生中なら停止して静止プレビューへ）。
+function afterRangeEdited() {
+  if (state.playing) {
+    stopPlayback();
+    runPreview();
+  }
+  renderTimeline();
+}
+
+// 再生位置（playhead）を範囲の始点に設定。
+rangeSetStartBtn.addEventListener("click", () => {
+  if (!state.inputPath) return;
+  state.playStart = Math.max(0, Math.min(state.playhead, state.playEnd - 0.05));
+  afterRangeEdited();
+  setStatus(`範囲の始点を ${fmtTime(state.playStart)} に設定`);
+});
+
+// 再生位置（playhead）を範囲の終点に設定。
+rangeSetEndBtn.addEventListener("click", () => {
+  if (!state.inputPath) return;
+  state.playEnd = Math.min(state.duration, Math.max(state.playhead, state.playStart + 0.05));
+  afterRangeEdited();
+  setStatus(`範囲の終点を ${fmtTime(state.playEnd)} に設定`);
+});
+
+// 範囲を全体に戻す（解除）。
+rangeClearBtn.addEventListener("click", () => {
+  if (!state.inputPath) return;
+  state.playStart = 0;
+  state.playEnd = state.duration;
+  afterRangeEdited();
+  setStatus("再生範囲を全体に戻しました");
 });
 
 // ---- エクスポート ----
