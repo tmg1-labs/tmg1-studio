@@ -199,7 +199,7 @@ h2 {
   align-items: safe center;
   justify-content: safe center;
   background: #000;
-  border-radius: 6px;
+  border-radius: 0;
   overflow: auto;
   min-height: 0;
   position: relative;
