@@ -9,7 +9,7 @@ use std::process::{Command, Stdio};
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter};
 
-use crate::filter::{build_chain, Segment};
+use crate::filter::{build_chain, Chain, Segment};
 
 /// ffprobe で得た入力動画の情報。
 #[derive(Debug, Serialize)]
@@ -157,6 +157,49 @@ fn preview_mp4_path(raw_path: &Path) -> PathBuf {
     dir.join(format!("{stem}.preview.mp4"))
 }
 
+/// 入力の [start, start+dur) を chain で monob raw 化して out に書き出す。
+/// -ss(入力側=高速シーク) + -t(出力尺) で切り出し、-r で CFR 化して連結整合を取る。
+fn slice_to_raw(
+    input: &str,
+    chain: &Chain,
+    start: f64,
+    dur: f64,
+    fps: f64,
+    out: &std::path::Path,
+) -> Result<(), String> {
+    let status = Command::new("ffmpeg")
+        .args([
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-ss",
+            &start.to_string(),
+            "-i",
+            input,
+            "-t",
+            &dur.to_string(),
+            "-vf",
+            &chain.vf,
+            "-r",
+            &fps.to_string(),
+            "-f",
+            "rawvideo",
+            "-pix_fmt",
+            chain.pix_fmt,
+            "-sws_dither",
+            chain.sws_dither,
+        ])
+        .arg(out)
+        .stderr(Stdio::piped())
+        .output()
+        .map_err(|e| format!("ffmpeg を実行できませんでした: {e}"))?;
+    if !status.status.success() {
+        return Err(String::from_utf8_lossy(&status.stderr).into_owned());
+    }
+    Ok(())
+}
+
 /// 全区間を個別に monob raw 化 → 連結 → 目視用 mp4 を生成する。
 pub fn export(app: &AppHandle, p: &Project, out_path: &str) -> Result<ExportResult, String> {
     if p.width % 8 != 0 {
@@ -196,41 +239,8 @@ pub fn export(app: &AppHandle, p: &Project, out_path: &str) -> Result<ExportResu
         let dur = (seg.end_sec - seg.start_sec).max(0.0);
         let segfile = tmp.join(format!("seg{i}.raw"));
 
-        // -ss(入力側=高速シーク) + -t(出力尺) で区間を切り出し、-r で CFR 化して連結整合を取る。
-        let status = Command::new("ffmpeg")
-            .args([
-                "-hide_banner",
-                "-loglevel",
-                "error",
-                "-y",
-                "-ss",
-                &seg.start_sec.to_string(),
-                "-i",
-                &p.input_path,
-                "-t",
-                &dur.to_string(),
-                "-vf",
-                &chain.vf,
-                "-r",
-                &p.fps.to_string(),
-                "-f",
-                "rawvideo",
-                "-pix_fmt",
-                chain.pix_fmt,
-                "-sws_dither",
-                chain.sws_dither,
-            ])
-            .arg(&segfile)
-            .stderr(Stdio::piped())
-            .output()
-            .map_err(|e| format!("ffmpeg を実行できませんでした: {e}"))?;
-        if !status.status.success() {
-            return Err(format!(
-                "区間 {} のエンコードに失敗: {}",
-                i + 1,
-                String::from_utf8_lossy(&status.stderr)
-            ));
-        }
+        slice_to_raw(&p.input_path, &chain, seg.start_sec, dur, p.fps, &segfile)
+            .map_err(|e| format!("区間 {} のエンコードに失敗: {e}", i + 1))?;
 
         let bytes = std::fs::read(&segfile).map_err(|e| format!("区間 raw 読み込み失敗: {e}"))?;
         total_bytes += bytes.len() as u64;
@@ -292,4 +302,105 @@ pub fn export(app: &AppHandle, p: &Project, out_path: &str) -> Result<ExportResu
         mp4_path: mp4_path.to_string_lossy().into_owned(),
         frames,
     })
+}
+
+/// 再生範囲 [start, end) を区間ごとの設定で monob 化・連結し、ループ再生用の
+/// mp4 バイト列を返す。フロントは Blob URL にして `<video loop>` で再生する。
+pub fn render_range(p: &Project, start: f64, end: f64) -> Result<Vec<u8>, String> {
+    if p.width % 8 != 0 {
+        return Err(format!(
+            "幅 {} は 8 の倍数にしてください（monob のバイト境界のため）",
+            p.width
+        ));
+    }
+    if end <= start {
+        return Err("再生範囲が空です".to_string());
+    }
+
+    // 同時実行やエクスポートと衝突しないよう、呼び出しごとに一意な一時フォルダを使う。
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+    let tmp = std::env::temp_dir().join(format!("tmg1studio_range_{}_{}", std::process::id(), stamp));
+    std::fs::create_dir_all(&tmp).map_err(|e| format!("一時フォルダ作成失敗: {e}"))?;
+
+    let raw_path = tmp.join("range.raw");
+    let mut writer = std::io::BufWriter::new(
+        std::fs::File::create(&raw_path).map_err(|e| format!("一時 raw 作成失敗: {e}"))?,
+    );
+    let mut total_bytes: u64 = 0;
+
+    // 範囲に重なる区間を、区間ごとの chain でクランプしたスライスだけレンダリングして連結。
+    for (i, seg) in p.segments.iter().enumerate() {
+        let s = seg.start_sec.max(start);
+        let e = seg.end_sec.min(end);
+        if e <= s + 1e-6 {
+            continue;
+        }
+        let chain = build_chain(seg, p.width, p.height);
+        let segfile = tmp.join(format!("s{i}.raw"));
+        slice_to_raw(&p.input_path, &chain, s, e - s, p.fps, &segfile)
+            .map_err(|err| format!("再生範囲のレンダリングに失敗: {err}"))?;
+        let bytes = std::fs::read(&segfile).map_err(|err| format!("range raw 読み込み失敗: {err}"))?;
+        total_bytes += bytes.len() as u64;
+        writer
+            .write_all(&bytes)
+            .map_err(|err| format!("range raw 追記失敗: {err}"))?;
+        let _ = std::fs::remove_file(&segfile);
+    }
+    writer.flush().map_err(|e| format!("range raw フラッシュ失敗: {e}"))?;
+    drop(writer);
+
+    if total_bytes == 0 {
+        let _ = std::fs::remove_dir_all(&tmp);
+        return Err("再生範囲に有効なフレームがありません".to_string());
+    }
+
+    // 近傍拡大 mp4（yuv420p）。倍率 k は幅が ~480px 前後になるよう決め、偶数に丸める。
+    let k = ((480.0 / p.width as f64).round() as u32).max(1);
+    let mut vw = p.width * k;
+    let mut vh = p.height * k;
+    if vw % 2 == 1 {
+        vw += 1;
+    }
+    if vh % 2 == 1 {
+        vh += 1;
+    }
+    let mp4 = tmp.join("range.mp4");
+    let size = format!("{}x{}", p.width, p.height);
+    let vf = format!("scale={vw}:{vh}:flags=neighbor");
+    let status = Command::new("ffmpeg")
+        .args([
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-f",
+            "rawvideo",
+            "-pix_fmt",
+            "monob",
+            "-s",
+            &size,
+            "-r",
+            &p.fps.to_string(),
+            "-i",
+        ])
+        .arg(&raw_path)
+        .args(["-vf", &vf, "-pix_fmt", "yuv420p", "-an"])
+        .arg(&mp4)
+        .stderr(Stdio::piped())
+        .output()
+        .map_err(|e| format!("再生用 mp4 生成の ffmpeg 実行失敗: {e}"))?;
+    if !status.status.success() {
+        let _ = std::fs::remove_dir_all(&tmp);
+        return Err(format!(
+            "再生用 mp4 の生成に失敗: {}",
+            String::from_utf8_lossy(&status.stderr)
+        ));
+    }
+
+    let data = std::fs::read(&mp4).map_err(|e| format!("再生用 mp4 読み込み失敗: {e}"))?;
+    let _ = std::fs::remove_dir_all(&tmp);
+    Ok(data)
 }

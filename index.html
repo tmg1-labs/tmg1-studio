@@ -38,6 +38,7 @@
         </div>
         <div class="preview-frame">
           <img id="preview-img" alt="preview" />
+          <video id="preview-video" loop muted playsinline></video>
           <p id="preview-placeholder" class="placeholder">動画を読み込むと、ここに 1bit プレビューが表示されます</p>
         </div>
         <p id="preview-meta" class="meta"></p>
@@ -75,6 +76,8 @@
 
     <footer class="timeline-pane">
       <div class="timeline-header">
+        <button id="play-btn" class="primary" disabled>▶ 再生</button>
+        <button id="range-to-seg" disabled>区間を範囲に</button>
         <span id="time-readout" class="time-readout">00:00.00 / 00:00.00</span>
         <div class="spacer"></div>
         <button id="split-btn" disabled>ここで分割</button>

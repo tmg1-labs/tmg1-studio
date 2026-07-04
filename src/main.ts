@@ -38,7 +38,14 @@ const state = {
   playhead: 0, // 秒
   segments: [] as Segment[], // [0,duration] を連続被覆・昇順
   exporting: false,
+  playStart: 0, // 再生範囲の開始（秒）
+  playEnd: 0, // 再生範囲の終了（秒）
+  playing: false,
 };
+
+let objectUrl: string | null = null; // 再生中の Blob URL
+let followRaf: number | null = null; // 再生位置追従の rAF ハンドル
+let seeking = false; // スクラブでシーク操作中（追従の上書きを抑止）
 
 let segCounter = 0;
 function newSegId(): string {
@@ -59,9 +66,12 @@ const outW = $("out-w") as HTMLInputElement;
 const outH = $("out-h") as HTMLInputElement;
 const outFps = $("out-fps") as HTMLInputElement;
 const previewImg = $("preview-img") as HTMLImageElement;
+const previewVideo = $("preview-video") as HTMLVideoElement;
 const previewPlaceholder = $("preview-placeholder");
 const previewMeta = $("preview-meta");
 const zoomEl = $("zoom") as HTMLSelectElement;
+const playBtn = $("play-btn") as HTMLButtonElement;
+const rangeToSegBtn = $("range-to-seg") as HTMLButtonElement;
 const segLabel = $("seg-label");
 const contrastEl = $("contrast") as HTMLInputElement;
 const loEl = $("level-lo") as HTMLInputElement;
@@ -125,9 +135,12 @@ async function openVideo() {
     // 出力 fps の初期値は入力 fps の四捨五入。サイズは 128x64 既定のまま。
     if (info.fps > 0) outFps.value = String(Math.round(info.fps));
 
-    // 単一区間で初期化。
+    // 単一区間で初期化。再生範囲は全体。
     segCounter = 0;
     state.segments = [makeSegment(0, info.duration)];
+    state.playStart = 0;
+    state.playEnd = info.duration;
+    stopPlayback();
 
     const name = selected.split(/[\\/]/).pop() ?? selected;
     fileInfo.textContent = `${name}  (${info.width}x${info.height}, ${info.fps.toFixed(2)}fps, ${fmtTime(
@@ -140,6 +153,8 @@ async function openVideo() {
     exportBtn.disabled = false;
     splitBtn.disabled = false;
     deleteBtn.disabled = false;
+    playBtn.disabled = false;
+    rangeToSegBtn.disabled = false;
     previewPlaceholder.style.display = "none";
 
     renderTimeline();
@@ -195,13 +210,96 @@ function renderTimeline() {
     }
   });
 
+  // 再生範囲バンド + 両端ハンドル（区間境界にスナップ）。
+  if (state.duration > 0) {
+    const rs = (state.playStart / dur) * 100;
+    const re = (state.playEnd / dur) * 100;
+    const band = document.createElement("div");
+    band.className = "range-band";
+    band.style.left = `${rs}%`;
+    band.style.width = `${Math.max(0, re - rs)}%`;
+    timelineEl.appendChild(band);
+
+    const hStart = document.createElement("div");
+    hStart.className = "range-handle start";
+    hStart.style.left = `${rs}%`;
+    hStart.title = "再生開始";
+    hStart.addEventListener("mousedown", (e) => startRangeDrag(e, "start"));
+    timelineEl.appendChild(hStart);
+
+    const hEnd = document.createElement("div");
+    hEnd.className = "range-handle end";
+    hEnd.style.left = `${re}%`;
+    hEnd.title = "再生終了";
+    hEnd.addEventListener("mousedown", (e) => startRangeDrag(e, "end"));
+    timelineEl.appendChild(hEnd);
+  }
+
   // playhead
   const ph = document.createElement("div");
   ph.className = "playhead";
+  ph.id = "playhead-marker";
   ph.style.left = `${(state.playhead / dur) * 100}%`;
   timelineEl.appendChild(ph);
 
-  timeReadout.textContent = `${fmtTime(state.playhead)} / ${fmtTime(state.duration)}`;
+  updateReadout();
+}
+
+/** 時刻読み出し（playhead / 全体 ｜ 範囲）を更新する。 */
+function updateReadout() {
+  timeReadout.textContent = `${fmtTime(state.playhead)} / ${fmtTime(
+    state.duration,
+  )}　｜　範囲 ${fmtTime(state.playStart)}–${fmtTime(state.playEnd)}`;
+}
+
+// ---- 再生範囲ドラッグ（区間境界・0・終端にスナップ）----
+function snapPoints(): number[] {
+  const pts = new Set<number>([0, state.duration]);
+  for (const s of state.segments) {
+    pts.add(s.start_sec);
+    pts.add(s.end_sec);
+  }
+  return [...pts];
+}
+
+function startRangeDrag(e: MouseEvent, which: "start" | "end") {
+  e.preventDefault();
+  e.stopPropagation();
+  if (state.playing) {
+    stopPlayback();
+    runPreview();
+  }
+  const rect = timelineEl.getBoundingClientRect();
+  const dur = state.duration || 1;
+  const snapPx = 8;
+  const minGap = 0.05;
+
+  const onMove = (ev: MouseEvent) => {
+    const ratio = Math.min(1, Math.max(0, (ev.clientX - rect.left) / rect.width));
+    let t = ratio * dur;
+    // スナップ: 最も近い境界が閾値内なら吸着。
+    const snapSec = (snapPx / rect.width) * dur;
+    let bestD = snapSec;
+    for (const p of snapPoints()) {
+      const d = Math.abs(p - t);
+      if (d <= bestD) {
+        bestD = d;
+        t = p;
+      }
+    }
+    if (which === "start") {
+      state.playStart = Math.min(t, state.playEnd - minGap);
+    } else {
+      state.playEnd = Math.max(t, state.playStart + minGap);
+    }
+    renderTimeline();
+  };
+  const onUp = () => {
+    window.removeEventListener("mousemove", onMove);
+    window.removeEventListener("mouseup", onUp);
+  };
+  window.addEventListener("mousemove", onMove);
+  window.addEventListener("mouseup", onUp);
 }
 
 // ---- 境界ドラッグ ----
@@ -244,8 +342,30 @@ function setPlayhead(t: number, doPreview = true) {
 
 scrubEl.addEventListener("input", () => {
   const dur = state.duration || 1;
-  const t = (Number(scrubEl.value) / 1000) * dur;
-  setPlayhead(t);
+  let t = (Number(scrubEl.value) / 1000) * dur;
+  if (state.playing) {
+    // 再生中: 範囲内にクランプして video をシーク（再生は継続）。
+    t = Math.min(state.playEnd, Math.max(state.playStart, t));
+    seeking = true;
+    const rel = Math.min(
+      Math.max(0, t - state.playStart),
+      Math.max(0, state.playEnd - state.playStart - 0.001),
+    );
+    previewVideo.currentTime = rel;
+    state.playhead = t;
+    // 範囲外へドラッグしても表示はクランプ後の位置に補正。
+    scrubEl.value = String(Math.round((t / dur) * 1000));
+    const marker = document.getElementById("playhead-marker");
+    if (marker) marker.style.left = `${(t / dur) * 100}%`;
+    updateReadout();
+  } else {
+    setPlayhead(t);
+  }
+});
+
+// ドラッグ終了でシークフラグを解除（追従ループが再び位置を反映）。
+scrubEl.addEventListener("change", () => {
+  seeking = false;
 });
 
 // ---- 分割・削除 ----
@@ -353,6 +473,8 @@ let previewTimer: number | undefined;
 let previewSeq = 0;
 function schedulePreview() {
   if (!state.inputPath) return;
+  // 再生中に編集したら、静止プレビューへ戻す（古いモーションを見せない）。
+  if (state.playing) stopPlayback();
   window.clearTimeout(previewTimer);
   previewTimer = window.setTimeout(runPreview, 150);
 }
@@ -385,28 +507,149 @@ async function runPreview() {
 
 // ---- 表示ズーム ----
 // window=フレームに合わせる、それ以外は出力ピクセルに対する倍率（近傍拡大で等倍表示）。
-function applyZoom() {
-  if (previewImg.style.display === "none") return;
+// 静止プレビュー(img)と再生(video)の両方に同じ規則を適用する（表示側だけ見える）。
+function styleZoom(el: HTMLElement) {
   const mode = zoomEl.value;
   if (mode === "window") {
     // フレームいっぱいに拡大/縮小して収める（アスペクト比維持）。
-    // max-width だけだと小さい画像は拡大されないため object-fit: contain を使う。
-    previewImg.style.maxWidth = "none";
-    previewImg.style.maxHeight = "none";
-    previewImg.style.width = "100%";
-    previewImg.style.height = "100%";
-    previewImg.style.objectFit = "contain";
+    // max-width だけだと小さい素材は拡大されないため object-fit: contain を使う。
+    el.style.maxWidth = "none";
+    el.style.maxHeight = "none";
+    el.style.width = "100%";
+    el.style.height = "100%";
+    el.style.objectFit = "contain";
   } else {
     const z = Number(mode) / 100;
-    previewImg.style.objectFit = "fill";
-    previewImg.style.maxWidth = "none";
-    previewImg.style.maxHeight = "none";
-    previewImg.style.width = `${Math.round(Number(outW.value) * z)}px`;
-    previewImg.style.height = `${Math.round(Number(outH.value) * z)}px`;
+    el.style.objectFit = "fill";
+    el.style.maxWidth = "none";
+    el.style.maxHeight = "none";
+    el.style.width = `${Math.round(Number(outW.value) * z)}px`;
+    el.style.height = `${Math.round(Number(outH.value) * z)}px`;
   }
 }
 
+function applyZoom() {
+  styleZoom(previewImg);
+  styleZoom(previewVideo);
+}
+
 zoomEl.addEventListener("change", applyZoom);
+
+// ---- 再生（範囲を mp4 化して <video> でループ）----
+function revokeUrl() {
+  if (objectUrl) {
+    URL.revokeObjectURL(objectUrl);
+    objectUrl = null;
+  }
+}
+
+// 再生位置を playhead に追従させる（rAF で軽量更新。renderTimeline やプレビュー
+// 再スケジュールは呼ばない＝再生を止めない）。mp4 は範囲先頭を 0 とするので
+// 実時刻 = playStart + video.currentTime。
+function followTick() {
+  if (!state.playing) {
+    followRaf = null;
+    return;
+  }
+  const dur = state.duration || 1;
+  let t = state.playStart + previewVideo.currentTime;
+  if (t > state.playEnd) t = state.playEnd;
+  state.playhead = t;
+  // シーク操作中はスクラブ/マーカーをユーザに委ね、追従は上書きしない。
+  if (!seeking) {
+    const marker = document.getElementById("playhead-marker");
+    if (marker) marker.style.left = `${(t / dur) * 100}%`;
+    scrubEl.value = String(Math.round((t / dur) * 1000));
+    updateReadout();
+  }
+  followRaf = requestAnimationFrame(followTick);
+}
+
+function stopPlayback() {
+  if (followRaf !== null) {
+    cancelAnimationFrame(followRaf);
+    followRaf = null;
+  }
+  previewVideo.pause();
+  previewVideo.removeAttribute("src");
+  previewVideo.load();
+  revokeUrl();
+  previewVideo.style.display = "none";
+  previewImg.style.display = "block";
+  state.playing = false;
+  playBtn.textContent = "▶ 再生";
+}
+
+async function startPlayback() {
+  if (!state.inputPath || state.playing) return;
+  const w = Number(outW.value);
+  const h = Number(outH.value);
+  const fps = Number(outFps.value);
+  if (w % 8 !== 0) {
+    setStatus("幅は 8 の倍数にしてください（monob のバイト境界）", true);
+    return;
+  }
+  if (state.playEnd <= state.playStart) {
+    setStatus("再生範囲が空です", true);
+    return;
+  }
+  playBtn.disabled = true;
+  setStatus("再生用にレンダリング中…");
+  try {
+    const project = {
+      input_path: state.inputPath,
+      width: w,
+      height: h,
+      fps,
+      segments: state.segments,
+    };
+    const buf = await invoke<ArrayBuffer>("render_range", {
+      project,
+      startSec: state.playStart,
+      endSec: state.playEnd,
+    });
+    revokeUrl();
+    objectUrl = URL.createObjectURL(new Blob([buf], { type: "video/mp4" }));
+    previewVideo.src = objectUrl;
+    previewImg.style.display = "none";
+    previewVideo.style.display = "block";
+    applyZoom();
+    await previewVideo.play().catch(() => {});
+    state.playing = true;
+    playBtn.textContent = "■ 停止";
+    followRaf = requestAnimationFrame(followTick);
+    setStatus(
+      `再生中: ${fmtTime(state.playStart)}–${fmtTime(state.playEnd)}（ループ）`,
+    );
+  } catch (e) {
+    setStatus(String(e), true);
+  } finally {
+    playBtn.disabled = false;
+  }
+}
+
+playBtn.addEventListener("click", () => {
+  if (state.playing) {
+    stopPlayback();
+    runPreview();
+  } else {
+    startPlayback();
+  }
+});
+
+// 現在の区間を再生範囲に設定（境界そのものなのでスナップ済み）。
+rangeToSegBtn.addEventListener("click", () => {
+  const seg = currentSegment();
+  if (!seg) return;
+  if (state.playing) {
+    stopPlayback();
+    runPreview();
+  }
+  state.playStart = seg.start_sec;
+  state.playEnd = seg.end_sec;
+  renderTimeline();
+  setStatus(`再生範囲を区間 #${currentIndex() + 1} に設定`);
+});
 
 // ---- エクスポート ----
 exportBtn.addEventListener("click", doExport);
