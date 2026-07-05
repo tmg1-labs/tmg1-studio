@@ -27,7 +27,7 @@ jobs:
             patchelf
 
       # --- フロントエンド (TypeScript + Vite) ---
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5  # v5 で Node24 ランタイム化(Node20 deprecation 警告を解消)
         with:
           node-version: '20'
           cache: npm
