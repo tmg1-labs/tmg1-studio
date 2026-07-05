@@ -57,6 +57,19 @@ npm run tauri dev      # アプリを起動
 cd src-tauri && cargo test
 ```
 
+## リリース
+
+`v*` タグ（例 `v0.2.0`）を push すると `.github/workflows/release.yml` が起動し、Windows(x64) /
+macOS(Apple Silicon) / Linux(x64) の各ネイティブランナーでインストーラをビルドして **ドラフト**の
+GitHub Release に添付する。タグの version はビルド時に `package.json` / `tauri.conf.json` /
+`Cargo.toml` へ同期され（`scripts/sync-version.mjs`）、`VITE_APP_VERSION` として表示バージョンにも
+渡る。ドラフトを確認してから公開する。
+
+> インストーラは**コード署名なし**のため、初回起動時に macOS Gatekeeper / Windows SmartScreen が
+> 警告を出す（macOS は右クリック→開く、Windows は「詳細情報→実行」で起動できる）。
+
+push/PR のチェック（`tsc` + `cargo test` + `clippy`）は `.github/workflows/ci.yml` が別途担う。
+
 ## エクスポート出力
 
 - `<name>.raw` — パックされた `monob` フレーム（`tmg1-cli encode` に渡して `.tmg1` 化）。

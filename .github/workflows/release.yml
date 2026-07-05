@@ -1,0 +1,85 @@
+name: Release
+
+# タグ push (v*) をトリガーに、3 プラットフォームの Tauri インストーラをビルドして
+# GitHub Release(ドラフト)へ添付する。Tauri はクロスコンパイルしないので各 OS の
+# ネイティブランナーでビルドする。テストは push/PR の ci.yml が担保するため、ここでは
+# ビルドとリリースに専念する（テストゲートなし）。
+on:
+  push:
+    tags:
+      - 'v*'
+
+# Release 作成・アセット添付に必要。built-in GITHUB_TOKEN を使う（PAT 不要）。
+permissions:
+  contents: write
+
+jobs:
+  release:
+    strategy:
+      # 1 プラットフォームが落ちても他は続行する。
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows-latest   # .msi / NSIS .exe
+            args: ''
+          - platform: macos-latest     # .dmg / .app（Apple Silicon・未署名）
+            args: '--target aarch64-apple-darwin'
+          - platform: ubuntu-22.04     # .AppImage / .deb（glibc 互換のため 22.04）
+            args: ''
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v5
+
+      # --- Tauri v2 の Linux ビルド依存（Ubuntu のみ。22.04 にも webkit2gtk-4.1 あり）---
+      - name: Install Tauri system deps (Linux)
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libgtk-3-dev \
+            librsvg2-dev \
+            libxdo-dev \
+            libssl-dev \
+            patchelf
+
+      # --- フロントエンド (TypeScript + Vite) ---
+      - uses: actions/setup-node@v5  # v5 で Node24 ランタイム化(Node20 deprecation 警告を解消)
+        with:
+          node-version: '20'
+          cache: npm
+
+      # Rust ツールチェーン(clippy 含む)は src-tauri/rust-toolchain.toml で固定。
+      # rustup が最初の cargo 実行時に該当バージョンを自動導入する。macOS の
+      # aarch64-apple-darwin は M 系ランナーのホストネイティブなので target 追加は不要。
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install npm deps
+        run: npm ci
+
+      # タグ(v 除去)を package.json / tauri.conf.json / Cargo.toml へ同期し、
+      # 同じ値を表示バージョン(VITE_APP_VERSION)として後続ステップへ渡す。
+      # windows でも Git Bash の ${GITHUB_REF_NAME#v} を使うため shell: bash 固定。
+      - name: Sync version to tag
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          node scripts/sync-version.mjs "$VERSION"
+          echo "APP_VERSION=$VERSION" >> "$GITHUB_ENV"
+
+      # tauri build → 同一 tagName のドラフト Release を各脚で共有してバンドルを添付。
+      # beforeBuildCommand(npm run build) に VITE_APP_VERSION が渡り __APP_VERSION__ に反映される。
+      - name: Build and release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VITE_APP_VERSION: ${{ env.APP_VERSION }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: 'TMG1 Studio ${{ github.ref_name }}'
+          releaseDraft: true
+          prerelease: false
+          args: ${{ matrix.args }}

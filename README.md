@@ -58,6 +58,19 @@ Backend unit tests (filter-chain builder):
 cd src-tauri && cargo test
 ```
 
+## Releases
+
+Pushing a `v*` tag (e.g. `v0.2.0`) triggers `.github/workflows/release.yml`, which builds
+installers on native runners for Windows (x64), macOS (Apple Silicon), and Linux (x64) and
+attaches them to a **draft** GitHub Release. The tag's version is synced into `package.json`,
+`tauri.conf.json`, and `Cargo.toml` at build time (`scripts/sync-version.mjs`), and passed to
+the app as the displayed version via `VITE_APP_VERSION`. Review the draft, then publish it.
+
+> Installers are **not code-signed**, so macOS Gatekeeper and Windows SmartScreen will warn on
+> first launch (right-click → Open on macOS; "More info → Run anyway" on Windows).
+
+Push/PR checks (`tsc` + `cargo test` + `clippy`) run separately in `.github/workflows/ci.yml`.
+
 ## Export output
 
 - `<name>.raw` — packed `monob` frames (feed to `tmg1-cli encode` to produce `.tmg1`).
