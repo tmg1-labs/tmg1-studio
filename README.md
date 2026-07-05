@@ -2,6 +2,8 @@
 
 **English** | [日本語](README.ja.md)
 
+![TMG1 Studio screenshot](docs/screenshot.webp)
+
 A cross-platform desktop GUI for turning video into 1-bit monochrome (`monob`)
 footage, tuned **per segment** of the timeline. Despite the name, its main job is
 authoring the packed `monob` raw file — direct `.tmg1` export is a convenience
@@ -31,46 +33,6 @@ emitting a `.tmg1` directly.
 The **same filter-chain builder** (`src-tauri/src/filter.rs`) is used for both preview and
 export, so what you see is what you get.
 
-## Architecture
-
-```
-tmg1-studio/
-├── src-tauri/            ... Rust backend (Tauri v2)
-│   ├── src/filter.rs         ... filter-chain builder (single source of truth)
-│   ├── src/ffmpeg.rs         ... ffmpeg / ffprobe process wrappers
-│   └── src/lib.rs            ... Tauri commands (probe_video / render_preview / export)
-└── src/                  ... Web frontend (Vanilla TS): timeline / params / preview
-```
-
-- **Preview is what the device shows**: the preview renders the 1-bit `monob` itself. TMG1
-  encoding is lossless, so the monochrome you see on screen is pixel-for-pixel what the
-  on-device OLED displays.
-- **External tools**: uses the system `ffmpeg` / `ffprobe` (and `tmg1` for `tmg1` export) —
-  none are bundled. Each executable is found on `PATH` by default, or you can point to a
-  specific path in the app settings.
-
-## Prerequisites
-
-- [Rust](https://rustup.rs/) + [Node.js](https://nodejs.org/) (18+)
-- `ffmpeg` and `ffprobe` available on `PATH` (or set their paths in the app settings)
-- For `tmg1` export: the [`tmg1`](https://github.com/tmg1-labs/tmg1-cli) CLI on `PATH` (or set its path in the app settings)
-- Tauri v2 [system dependencies](https://tauri.app/start/prerequisites/) for your OS
-
-## Development
-
-```bash
-npm install
-npm run tauri dev      # launch the app
-```
-
-Backend unit tests (filter-chain builder):
-
-```bash
-cd src-tauri && cargo test
-```
-
-Push/PR checks (`tsc` + `cargo test` + `clippy`) run in `.github/workflows/ci.yml`.
-
 ## Export output
 
 Export renders every segment with its own settings and concatenates them into one
@@ -87,6 +49,33 @@ for eyeballing the result on a normal display (off by default).
 
 > [!IMPORTANT]
 > The frame width must be a multiple of 8 (the `monob` byte boundary).
+
+## Prerequisites
+
+**To build (running from source)**
+
+- [Rust](https://rustup.rs/) + [Node.js](https://nodejs.org/) (18+)
+- Tauri v2 [system dependencies](https://tauri.app/start/prerequisites/) for your OS
+
+**To run (using the app)**
+
+- `ffmpeg` and `ffprobe` — on `PATH`, or set their paths in the app settings
+- For `tmg1` export only: the [`tmg1`](https://github.com/tmg1-labs/tmg1-cli) CLI — likewise on `PATH` or set in the app settings
+
+## Development
+
+```bash
+npm install
+npm run tauri dev      # launch the app
+```
+
+Backend unit tests (filter-chain builder):
+
+```bash
+cd src-tauri && cargo test
+```
+
+Push/PR checks (`tsc` + `cargo test` + `clippy`) run in `.github/workflows/ci.yml`.
 
 ## Related projects
 
