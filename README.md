@@ -19,7 +19,9 @@ independently for each, previewing the exact `monob` (1-bit) result as you go.
     high threshold (removes stray white dots in dark areas / dropouts in the foreground).
   - **Dither** — Bayer / error-diffusion / none (`-sws_dither`).
 - Export splits each segment, transcodes with its own settings, and concatenates the raw
-  losslessly — plus a nearest-neighbour upscaled `.preview.mp4` for eyeballing.
+  losslessly. Choose the output format — `raw`, `tmg1`, or both — and the app invokes the
+  `tmg1` CLI itself to produce a ready-to-play `.tmg1` (no separate encode step). A
+  nearest-neighbour upscaled `.preview.mp4` for eyeballing is an optional extra (off by default).
 
 The **same filter-chain builder** (`src-tauri/src/filter.rs`) is used for both preview and
 export, so what you see is what you get.
@@ -37,12 +39,15 @@ tmg1-studio/
 
 - **Preview fidelity**: `monob` only (no TMG1 round-trip). TMG1 encoding is lossless, so the
   monochrome preview matches the on-device pixels.
-- **ffmpeg**: uses the system `ffmpeg` / `ffprobe` on `PATH` (not bundled).
+- **External tools**: uses the system `ffmpeg` / `ffprobe` (and `tmg1` for `tmg1` export) —
+  none are bundled. Each executable is found on `PATH` by default, or you can point to a
+  specific path in the app settings.
 
 ## Prerequisites
 
 - [Rust](https://rustup.rs/) + [Node.js](https://nodejs.org/) (18+)
-- `ffmpeg` and `ffprobe` available on `PATH`
+- `ffmpeg` and `ffprobe` available on `PATH` (or set their paths in the app settings)
+- For `tmg1` export: the [`tmg1`](https://github.com/tmg1-labs/tmg1-cli) CLI on `PATH` (or set its path in the app settings)
 - Tauri v2 [system dependencies](https://tauri.app/start/prerequisites/) for your OS
 
 ## Development
@@ -73,8 +78,11 @@ Push/PR checks (`tsc` + `cargo test` + `clippy`) run separately in `.github/work
 
 ## Export output
 
-- `<name>.raw` — packed `monob` frames (feed to `tmg1-cli encode` to produce `.tmg1`).
-- `<name>.preview.mp4` — 6× nearest-neighbour upscale for visual confirmation.
+Depending on the chosen format:
+
+- `<name>.tmg1` — ready-to-play stream, encoded by invoking the `tmg1` CLI (format `tmg1` or `both`).
+- `<name>.raw` — packed `monob` frames, for feeding to `tmg1-cli encode` yourself (format `raw` or `both`).
+- `<name>.preview.mp4` — 6× nearest-neighbour upscale for visual confirmation (optional, off by default).
 
 > Width must be a multiple of 8 (monob byte boundary).
 

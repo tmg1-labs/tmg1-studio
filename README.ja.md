@@ -17,8 +17,9 @@ English: [README.md](README.md)
   - **コントラスト**（`eq=contrast`）
   - **レベル絞り** — 下限未満を黒潰し、上限超を白飛ばし（暗部の孤立白点・前景の欠け対策）。
   - **ディザ** — Bayer / 誤差拡散 / なし（`-sws_dither`）。
-- エクスポートは各区間を個別設定でトランスコードし raw を無劣化連結。あわせて目視確認用に
-  近傍拡大した `.preview.mp4` も出力。
+- エクスポートは各区間を個別設定でトランスコードし raw を無劣化連結。出力形式は `raw` /
+  `tmg1` / 両方から選べ、`tmg1` はアプリが `tmg1` CLI を呼んでそのまま再生可能な `.tmg1` を
+  生成する（別途 encode 不要）。目視確認用の近傍拡大 `.preview.mp4` は任意出力（既定オフ）。
 
 プレビューとエクスポートは**同一のフィルタチェーン組み立て**（`src-tauri/src/filter.rs`）を
 使うため、見た目と出力が一致する。
@@ -36,12 +37,14 @@ tmg1-studio/
 
 - **プレビュー忠実度**: `monob` のみ（TMG1 ラウンドトリップはしない）。TMG1 エンコードは
   ロスレスなので、モノクロプレビューが実機ピクセルと一致する。
-- **ffmpeg**: システム PATH の `ffmpeg` / `ffprobe` を使う（同梱しない）。
+- **外部ツール**: システムの `ffmpeg` / `ffprobe`（`tmg1` 出力時は `tmg1` も）を使う。いずれも
+  同梱しない。既定では `PATH` から探すが、アプリ設定で個別の実行パスを指定することもできる。
 
 ## 前提
 
 - [Rust](https://rustup.rs/) + [Node.js](https://nodejs.org/)（18 以上）
-- PATH に `ffmpeg` / `ffprobe`
+- PATH に `ffmpeg` / `ffprobe`（またはアプリ設定で実行パスを指定）
+- `tmg1` 出力を使う場合: PATH に [`tmg1`](https://github.com/tmg1-labs/tmg1-cli) CLI（またはアプリ設定で実行パスを指定）
 - OS ごとの Tauri v2 [システム依存](https://tauri.app/start/prerequisites/)
 
 ## 開発
@@ -72,8 +75,11 @@ push/PR のチェック（`tsc` + `cargo test` + `clippy`）は `.github/workflo
 
 ## エクスポート出力
 
-- `<name>.raw` — パックされた `monob` フレーム（`tmg1-cli encode` に渡して `.tmg1` 化）。
-- `<name>.preview.mp4` — 6 倍近傍拡大の目視確認用。
+選んだ形式に応じて出力される:
+
+- `<name>.tmg1` — そのまま再生可能なストリーム。`tmg1` CLI を呼んでエンコードする（形式 `tmg1` / 両方）。
+- `<name>.raw` — パックされた `monob` フレーム。自分で `tmg1-cli encode` に渡す用（形式 `raw` / 両方）。
+- `<name>.preview.mp4` — 6 倍近傍拡大の目視確認用（任意出力・既定オフ）。
 
 > 幅は 8 の倍数にすること（monob のバイト境界）。
 
