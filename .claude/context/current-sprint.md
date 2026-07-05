@@ -1,6 +1,6 @@
 # 現在の作業コンテキスト
 
-最終更新: 2026-07-05（エクスポート結果レポート＋進捗バーの GUI 実操作確認完了。実装コミット済み `800f2dc`/`402c586`、push 済み）
+最終更新: 2026-07-05（テスト/チェック CI 実装＋GitHub Actions 実走 green・annotations 0 確認。push 済み `cf82ace`/`9c04944`/`5c15f85`）
 
 ## 今やっていること
 - **テスト/チェック CI（GitHub Actions）実装**（2026-07-05、ローカル検証済み・**未コミット**）。
@@ -16,7 +16,10 @@
   - clippy 指摘 4件を `src-tauri/src/ffmpeg.rs` で解消（`x % 8 != 0`→`!x.is_multiple_of(8)` 2件、
     手動チェック付き除算→`checked_div` 2件）。**バグ修正ではなくスタイル系 lint の解消**。
   - **検証**: ローカルで `npm run build`✅ / `cargo test`（2 passed）/ `cargo clippy --all-targets -D warnings`
-    EXIT 0。**GitHub Actions 上での実走はまだ（push 後に確認）**。
+    EXIT 0。**GitHub Actions 実走も green 確認済み**（初回 6m44s→rust-cache 効き2回目 1m49s）。
+  - **annotations 0 化**（commit `5c15f85`）: 初回実走で `actions/setup-node@v4` に Node20 deprecation
+    警告が付いたため **v5（runs.using=node24）へ更新**。esp32-demo で setup-python/cache を v6 化したのと
+    同じ annotations 0 方針に統一。`setup-node` は v5 が Node24 対応（v6 も存在するが v5 で解消）。
 
 - **GitHub リモート作成 ＋ 初回 push 完了**（2026-07-05、push 済み）。
   - リモート `origin` = `https://github.com/tmg1-labs/tmg1-studio.git`（他の兄弟リポと同じ HTTPS、

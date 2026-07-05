@@ -100,6 +100,25 @@
 - **回避策**: tmg1-studio に対する git は**毎回 `cd /d/workspace/TsuMuGi/tmg1-studio && git ...` を明示**。
   実行前に `git status` を挟んで対象リポを確認すると安全。
 
+### CI: Tauri の Rust 側は Linux で system-deps 導入が要る／clippy -D warnings はツールチェーン固定必須
+- **メモ（CI 構成）**: `.github/workflows/ci.yml`（push=main/feature/**・PR）の単一ジョブ `check`。
+  Tauri アプリは `tauri` クレート依存のため **Linux でのビルド（`cargo test`/`clippy` 含む）に system-deps が必要**
+  → apt で `libwebkit2gtk-4.1-dev`/`libgtk-3-dev`/`librsvg2-dev`/`libxdo-dev`/`libssl-dev`/`patchelf` を導入
+  （Ubuntu 24.04 ランナー想定のパッケージ名）。フロントは `npm run build`（tsc --noEmit + vite build）で検証。
+- **落とし穴（clippy ドリフト）**: `cargo clippy --all-targets -- -D warnings` は clippy のバージョン依存で、
+  浮動 stable だと**新 Rust リリースの新 lint で突然赤くなる**。→ `src-tauri/rust-toolchain.toml` で
+  `channel="1.96.0"`＋`components=["clippy","rustfmt"]` に**固定**。上げるときは先にローカルで
+  `cargo clippy --all-targets -- -D warnings` を通してから channel を上げること。
+- **実績**: 初回実走 green（6m44s）。`Swatinem/rust-cache`（workspaces: src-tauri）で2回目 1m49s に短縮。
+
+### GitHub Actions: Node20 deprecation 警告（setup-node は v5 で node24）
+- **症状**: 実走の annotation に「Node.js 20 is deprecated ... forced to run on Node.js 24」（`actions/setup-node@v4`）。
+  失敗ではないが警告が付く。
+- **回避策**: **`setup-node@v5`（`runs.using: node24`）へ更新**で annotations 0。esp32-demo が
+  setup-python/cache を v6 化したのと同じ方針。**「最新メジャー=Node24 とは限らない」ので上げる前に
+  `runs.using` を実確認**（`gh api repos/actions/setup-node/contents/action.yml?ref=v5 --jq .content | base64 -d | grep -A2 runs:`）。
+  setup-node は v5 で node24（v6 も存在するが v5 で解消）。
+
 ## 地雷・禁止事項
 - プレビューとエクスポートでフィルタチェーン構築を分岐させない（WYSIWYG が崩れる。
   修正は `filter.rs` に一本化する）。
