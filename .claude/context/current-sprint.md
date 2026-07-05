@@ -1,8 +1,23 @@
 # 現在の作業コンテキスト
 
-最終更新: 2026-07-05（エクスポート結果レポート＋進捗バー実装、GitHub 初回 push。コミット済み `800f2dc`/`402c586`、push 済み）
+最終更新: 2026-07-05（エクスポート結果レポート＋進捗バーの GUI 実操作確認完了。実装コミット済み `800f2dc`/`402c586`、push 済み）
 
 ## 今やっていること
+- **テスト/チェック CI（GitHub Actions）実装**（2026-07-05、ローカル検証済み・**未コミット**）。
+  - 方針（ユーザー選択）: (1) 範囲=**テスト/チェック CI をまず先に**（リリース CI は別途）、
+    (2) clippy は**4件修正＋ゲート維持＋ツールチェーン固定**。
+  - `.github/workflows/ci.yml` 新規（push=main/feature/**・pull_request）。ubuntu-latest 単一ジョブ `check`:
+    Tauri の Linux ビルド依存を apt 導入（`libwebkit2gtk-4.1-dev`/`libgtk-3-dev`/`librsvg2-dev`/
+    `libxdo-dev`/`libssl-dev`/`patchelf`）→ `npm ci`＋`npm run build`（tsc --noEmit + vite build）→
+    `Swatinem/rust-cache`（workspaces: src-tauri）→ `cargo test`→`cargo clippy --all-targets -- -D warnings`。
+    リリース用インストーラのビルドはしない（チェック専用）。
+  - `src-tauri/rust-toolchain.toml` 新規で **Rust を `1.96.0` に固定**（`components=["clippy","rustfmt"]`）。
+    浮動 stable だと新 clippy リリースで `-D warnings` が突然赤くなるためドリフト防止。
+  - clippy 指摘 4件を `src-tauri/src/ffmpeg.rs` で解消（`x % 8 != 0`→`!x.is_multiple_of(8)` 2件、
+    手動チェック付き除算→`checked_div` 2件）。**バグ修正ではなくスタイル系 lint の解消**。
+  - **検証**: ローカルで `npm run build`✅ / `cargo test`（2 passed）/ `cargo clippy --all-targets -D warnings`
+    EXIT 0。**GitHub Actions 上での実走はまだ（push 後に確認）**。
+
 - **GitHub リモート作成 ＋ 初回 push 完了**（2026-07-05、push 済み）。
   - リモート `origin` = `https://github.com/tmg1-labs/tmg1-studio.git`（他の兄弟リポと同じ HTTPS、
     組織は**複数形 `tmg1-labs`**。ユーザー指定の "tmg1-lab" 単数形は実在せず `tmg1-labs` が正）。
@@ -19,7 +34,7 @@
     `tmg1-encoding` で不定表示、`finally` で `hideRenderProgress`）。**backend 無変更**（既存イベント活用）。
   - バーは再生レンダリングと共用（同時実行なし）。ラベルは表示のたび動的セット＝セッション中の言語切替に追従。
   - i18n キー追加不要（`exporting`/`tmg1Encoding`/`rendering` は既存）。
-  - **GUI 実操作での見た目（ステップ→パルスの動き）は未確認**。
+  - **GUI 実操作での見た目（ステップ→パルスの動き）確認済み（2026-07-05、ユーザー確認）**。
 
 - **エクスポート結果レポートのモーダル表示**（2026-07-05、実装・`cargo test`/`tsc` 通過／コミット済み `800f2dc`）。
   - 方針（ユーザー選択）: (1) 完了時に**専用モーダル**ポップアップ、(2) **全体サマリのみ**（区間内訳なし）、
@@ -32,7 +47,7 @@
     値は等幅・path は改行維持折返し）、locales 3言語に `report*` キー12種追加。
   - 表示項目: 解像度/fps/フレーム数/尺/区間数/形式/RAW サイズ/TMG1 サイズ/圧縮率(%と N:1)/平均B/frame/
     エンコード設定/出力パス。**RAW のみエクスポート時は圧縮系の行を隠す**。閉じる/オーバーレイ/Esc で閉じる。
-  - **GUI 実操作での表示・実ファイルサイズ一致目視は未確認**。
+  - **GUI 実操作での表示・実ファイルサイズ一致目視 確認済み（2026-07-05、ユーザー確認）**。
 
 ## 過去にやったこと
 - **プレビューmp4を任意出力化**（2026-07-05、実装・検証済み／コミット済み `491cd85`）。
@@ -128,13 +143,14 @@
 - ffmpeg/ffprobe は PATH 前提。実行環境に無いと probe/preview/export が失敗する。
 - `tauri dev` 実行中は exe ロックで `cargo build` が「アクセス拒否」になる → 検証は `cargo check`。
 
+## 決定事項（やらないと決めたこと）
+- **組み込みプリセット名の翻訳はしない**（2026-07-05 ユーザー判断で不要）。現状の非翻訳・英語名固定の
+  ままとする（永続データとの不整合を避けるため、内部キー＋表示名翻訳への移行はしない）。
+
 ## 次にやること
 - タグ駆動の自動ビルド/リリース CI（GitHub Actions）。その際 `VITE_APP_VERSION` にタグを渡し、
   installer 用に tauri.conf.json / Cargo.toml の version もタグへ同期する構成にする。
-- レポート／進捗バーの **GUI 実操作確認**（レポート表示・実ファイルサイズ一致、バーのステップ→パルス）。
 - 未検討: 「名前を付けて保存」（別名保存）。
-- **見送り**: 組み込みプリセット名の翻訳（2026-07-05 ユーザー判断で不要）。現状の非翻訳・英語名固定の
-  ままとする（永続データとの不整合を避けるため、内部キー＋表示名翻訳への移行はしない）。
 
 ## 参考
 - パイプライン全体像・関連リポジトリは `CLAUDE.md` / `architecture.md` を参照。
