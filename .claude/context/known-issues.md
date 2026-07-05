@@ -62,6 +62,29 @@
 - **回避策**: `presets.json`（アプリ data ディレクトリ、例 `%APPDATA%\com.tmg1labs.studio\`）を削除して再 seed。
   なお i18n では**プリセット名は非翻訳**（永続データのため）。翻訳するなら内部キー＋表示名翻訳への移行が要る。
 
+### `display` を付けた要素は `hidden` 属性が効かなくなる
+- **症状**: `.info-badge { display: inline-flex }` を当てると、JS で `el.hidden = true` にしても消えない。
+- **原因**: UA の `[hidden]{display:none}` と著者スタイルの `.class{display:…}` は同特異性で、著者スタイルが勝つ。
+- **回避策**: 明示的に `.info-badge[hidden] { display: none; }` を書く。JS で hidden トグルする要素に
+  `display` を当てるときは必ずセットで用意する。
+
+### ネイティブ `title` と自作ツールチップの二重表示
+- **症状**: 情報アイコンにアクセシビリティ用 `title`（data-i18n-title）と CSS 自作ツールチップを両方付けると、
+  ホバー時にブラウザ標準ツールチップと自作ツールチップが重なって出る。
+- **回避策**: どちらか一方に統一する（今回は `title` を外し自作ツールチップのみ）。斜体セリフ字体などの
+  装飾は親（バッジ）ではなく対象グリフ（`.info-icon`）だけに当て、ツールチップへ継承させない。
+
+### range input のつまみ中心をタイムラインの縦線に合わせる
+- **メモ**: `<input type=range>` のつまみ中心の可動域は `[R, W-R]`（R=つまみ半径）で 0/W の端に届かない。
+  タイムライン側の縦線（`left:0%〜100%`）と一致させるには、**スクラブを左右に R はみ出させて**
+  可動域を 0%〜100% に広げる（`.scrub width:calc(100%+2R); margin:… -R`、つまみ幅=2R を固定）。
+  逆に縦線をつまみ中心へ寄せる方式だと縦線が端に届かなくなる。
+
+### `setTitle` 等の window API は capability 追加＝Rust 側再ビルドが必要
+- **症状**: `getCurrentWindow().setTitle()` などを追加しても、capability 未追加だと権限エラーで無反応。
+- **回避策**: `capabilities/default.json` に `core:window:allow-set-title` 等を追加。**capabilities 変更は
+  フロント HMR では反映されず**、`tauri dev` の Rust 再ビルド（実質アプリ再起動）が要る。
+
 ### レンダリングキャッシュの無効化は markDirty に紐付け
 - **メモ**: 再生用レンダリング結果(`objectUrl`)は `renderValid` で有効性を管理し、`markDirty`（範囲/
   パラメータ/区間/出力の編集）で無効化。**スクラブ（playhead 移動）は markDirty しない**ので、停止→
