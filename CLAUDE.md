@@ -13,7 +13,8 @@
 - バックエンド: Rust (edition 2021)。crate `tmg1_studio_lib`
 - 外部依存: システムの `ffmpeg` / `ffprobe`（`PATH` 上のものを利用。同梱しない）
 - テスト: `cd src-tauri && cargo test`（フィルタチェーンビルダの単体テスト）
-- 出力: 形式を選択可（`<name>.raw` packed `monob` / `<name>.tmg1` / 両方）+ 常に `<name>.preview.mp4`。
+- 出力: 形式を選択可（`<name>.raw` packed `monob` / `<name>.tmg1` / 両方）。目視用 `<name>.preview.mp4`
+  はエクスポート設定でチェックしたときのみ（既定オフ）。
   `.tmg1` は PATH 上の `tmg1` CLI をサブプロセスで呼んで生成（codec/CLI 本体は本 repo に持ち込まない）
 - 位置づけ: TMG1 パイプラインの制作ツール（コーデック本体は `tmg1-codec`、CLI は `tmg1-cli`）
 

@@ -128,8 +128,8 @@ pub struct ExportResult {
     pub raw_path: Option<String>,
     /// 直接再生可能な tmg1 のパス（Tmg1/Both のときのみ）。
     pub tmg1_path: Option<String>,
-    /// 目視確認用に等倍近傍拡大した mp4 のパス。
-    pub mp4_path: String,
+    /// 目視確認用に近傍拡大した mp4 のパス（preview 指定時のみ）。
+    pub mp4_path: Option<String>,
     /// 総フレーム数。
     pub frames: u64,
 }
@@ -443,12 +443,13 @@ fn encode_tmg1(
 }
 
 /// 全区間を個別に monob raw 化 → 連結し、指定形式（raw / tmg1 / 両方）で出力する。
-/// あわせて目視用 mp4 を必ず生成する。
+/// preview が true のときのみ目視用 mp4 も生成する。
 pub fn export(
     app: &AppHandle,
     p: &Project,
     out_path: &str,
     format: ExportFormat,
+    preview: bool,
 ) -> Result<ExportResult, String> {
     if p.width % 8 != 0 {
         return Err(format!(
@@ -513,42 +514,47 @@ pub fn export(
     writer.flush().map_err(|e| format!("raw フラッシュ失敗: {e}"))?;
     drop(writer);
 
-    // 目視確認用 mp4（近傍拡大 6x, yuv420p）。入力 raw は成果物/一時のどちらでも可。
-    let mp4_path = preview_mp4_path(&raw_out);
-    let size = format!("{}x{}", p.width, p.height);
-    let mp4_status = Command::new("ffmpeg")
-        .args([
-            "-hide_banner",
-            "-loglevel",
-            "error",
-            "-y",
-            "-f",
-            "rawvideo",
-            "-pix_fmt",
-            "monob",
-            "-s",
-            &size,
-            "-r",
-            &p.fps.to_string(),
-            "-i",
-        ])
-        .arg(&raw_write_path)
-        .args([
-            "-vf",
-            "scale=iw*6:ih*6:flags=neighbor",
-            "-pix_fmt",
-            "yuv420p",
-        ])
-        .arg(&mp4_path)
-        .stderr(Stdio::piped())
-        .output()
-        .map_err(|e| format!("プレビュー mp4 生成の ffmpeg 実行失敗: {e}"))?;
-    if !mp4_status.status.success() {
-        return Err(format!(
-            "プレビュー mp4 の生成に失敗: {}",
-            String::from_utf8_lossy(&mp4_status.stderr)
-        ));
-    }
+    // 目視確認用 mp4（近傍拡大 6x, yuv420p）。preview 指定時のみ生成する。
+    let mp4_path = if preview {
+        let mp4_path = preview_mp4_path(&raw_out);
+        let size = format!("{}x{}", p.width, p.height);
+        let mp4_status = Command::new("ffmpeg")
+            .args([
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-y",
+                "-f",
+                "rawvideo",
+                "-pix_fmt",
+                "monob",
+                "-s",
+                &size,
+                "-r",
+                &p.fps.to_string(),
+                "-i",
+            ])
+            .arg(&raw_write_path)
+            .args([
+                "-vf",
+                "scale=iw*6:ih*6:flags=neighbor",
+                "-pix_fmt",
+                "yuv420p",
+            ])
+            .arg(&mp4_path)
+            .stderr(Stdio::piped())
+            .output()
+            .map_err(|e| format!("プレビュー mp4 生成の ffmpeg 実行失敗: {e}"))?;
+        if !mp4_status.status.success() {
+            return Err(format!(
+                "プレビュー mp4 の生成に失敗: {}",
+                String::from_utf8_lossy(&mp4_status.stderr)
+            ));
+        }
+        Some(mp4_path.to_string_lossy().into_owned())
+    } else {
+        None
+    };
 
     // tmg1 化（形式に含まれるときのみ）。連結済み raw を PATH の tmg1 CLI に委ねる。
     if format.wants_tmg1() {
@@ -570,7 +576,7 @@ pub fn export(
     Ok(ExportResult {
         raw_path: format.wants_raw().then(|| raw_out.to_string_lossy().into_owned()),
         tmg1_path: format.wants_tmg1().then(|| tmg1_out.to_string_lossy().into_owned()),
-        mp4_path: mp4_path.to_string_lossy().into_owned(),
+        mp4_path,
         frames,
     })
 }

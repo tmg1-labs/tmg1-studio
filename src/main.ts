@@ -38,7 +38,7 @@ interface VideoInfo {
 interface ExportResult {
   raw_path?: string | null;
   tmg1_path?: string | null;
-  mp4_path: string;
+  mp4_path?: string | null;
   frames: number;
 }
 
@@ -54,6 +54,7 @@ interface ProjectFile {
   play_end: number;
   // version 2 で追加（v1 では欠落 → 読込時に既定補完）。
   export_format?: ExportFormat;
+  export_preview?: boolean;
   encode?: Tmg1Encode;
 }
 
@@ -131,6 +132,7 @@ const state = {
   playEnd: 0, // 再生範囲の終了（秒）
   playing: false,
   exportFormat: "tmg1" as ExportFormat, // エクスポート形式（ダイアログで選択）
+  exportPreview: false, // 目視用プレビュー mp4 も出力するか（既定オフ）
   encode: { ...DEFAULT_TMG1_ENCODE } as Tmg1Encode, // tmg1 エンコード設定
 };
 
@@ -208,6 +210,7 @@ const encVfrEl = $("enc-vfr") as HTMLInputElement;
 const encPredictionEl = $("enc-prediction") as HTMLInputElement;
 const encDeltaEl = $("enc-delta") as HTMLInputElement;
 const encIndexEl = $("enc-index") as HTMLInputElement;
+const encPreviewEl = $("enc-preview") as HTMLInputElement;
 const encCmdEl = $("enc-cmd");
 const exportGoBtn = $("export-go") as HTMLButtonElement;
 const exportCancelBtn = $("export-cancel") as HTMLButtonElement;
@@ -276,6 +279,7 @@ function applyProject(
     height: number;
     fps: number;
     exportFormat: ExportFormat;
+    exportPreview: boolean;
     encode: Tmg1Encode;
   },
 ) {
@@ -296,12 +300,14 @@ function applyProject(
     state.playStart = clamp(loaded.playStart, 0, info.duration);
     state.playEnd = clamp(loaded.playEnd, 0, info.duration);
     state.exportFormat = loaded.exportFormat;
+    state.exportPreview = loaded.exportPreview;
     state.encode = loaded.encode;
   } else {
     state.segments = [makeSegment(0, info.duration)];
     state.playStart = 0;
     state.playEnd = info.duration;
     state.exportFormat = "tmg1";
+    state.exportPreview = false;
     state.encode = { ...DEFAULT_TMG1_ENCODE };
   }
   stopPlayback();
@@ -491,6 +497,7 @@ async function writeProject(target: string) {
     play_start: state.playStart,
     play_end: state.playEnd,
     export_format: state.exportFormat,
+    export_preview: state.exportPreview,
     encode: state.encode,
   };
   await invoke("save_project", {
@@ -556,6 +563,7 @@ async function loadProject() {
       fps: data.fps,
       // v1 プロジェクト（欠落）は既定補完。encode は既定とマージして将来のフィールド欠落にも耐える。
       exportFormat: data.export_format ?? "tmg1",
+      exportPreview: data.export_preview ?? false,
       encode: { ...DEFAULT_TMG1_ENCODE, ...(data.encode ?? {}) },
     });
     setStatus(t("projectLoaded", { path: selected }));
@@ -1167,6 +1175,7 @@ let exportModalResolve: ((v: boolean) => void) | null = null;
 // state.encode / state.exportFormat をダイアログの各コントロールへ反映。
 function fillExportDialog() {
   outFormat.value = state.exportFormat;
+  encPreviewEl.checked = state.exportPreview;
   encCoderEl.value = state.encode.coder;
   encRiceModeEl.value = state.encode.rice_mode;
   encRiceKEl.value = String(state.encode.rice_k);
@@ -1291,14 +1300,17 @@ async function doExport() {
   // ダイアログの内容を state に取り込み（変更があれば未保存扱い）。
   const nextEncode = readEncodeFromDialog();
   const nextFormat = outFormat.value as ExportFormat;
+  const nextPreview = encPreviewEl.checked;
   if (
     nextFormat !== state.exportFormat ||
+    nextPreview !== state.exportPreview ||
     JSON.stringify(nextEncode) !== JSON.stringify(state.encode)
   ) {
     markDirty();
   }
   state.encode = nextEncode;
   state.exportFormat = nextFormat;
+  state.exportPreview = nextPreview;
   const format = nextFormat;
 
   // 出力形式（tmg1 / both / raw）。tmg1 のみ拡張子・フィルタを .tmg1 に、それ以外は .raw。
@@ -1328,16 +1340,15 @@ async function doExport() {
       project,
       outPath: target,
       format,
+      preview: state.exportPreview,
     });
     // 成果物パスは形式で出し分け（tmg1 があれば優先表示）。
-    const out = result.tmg1_path ?? result.raw_path ?? result.mp4_path;
-    setStatus(
-      t("exportDone", {
-        frames: result.frames,
-        out,
-        mp4: result.mp4_path,
-      }),
-    );
+    const out = result.tmg1_path ?? result.raw_path ?? result.mp4_path ?? target;
+    if (result.mp4_path) {
+      setStatus(t("exportDone", { frames: result.frames, out, mp4: result.mp4_path }));
+    } else {
+      setStatus(t("exportDoneNoPreview", { frames: result.frames, out }));
+    }
   } catch (e) {
     setStatus(String(e), true);
   } finally {

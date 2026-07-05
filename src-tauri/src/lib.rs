@@ -66,10 +66,13 @@ async fn export(
     project: Project,
     out_path: String,
     format: ExportFormat,
+    preview: bool,
 ) -> Result<ExportResult, String> {
-    tauri::async_runtime::spawn_blocking(move || ffmpeg::export(&app, &project, &out_path, format))
-        .await
-        .map_err(|e| format!("タスク実行失敗: {e}"))?
+    tauri::async_runtime::spawn_blocking(move || {
+        ffmpeg::export(&app, &project, &out_path, format, preview)
+    })
+    .await
+    .map_err(|e| format!("タスク実行失敗: {e}"))?
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
