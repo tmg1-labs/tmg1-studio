@@ -42,8 +42,9 @@ tmg1-studio/
 └── src/                  ... Web frontend (Vanilla TS): timeline / params / preview
 ```
 
-- **Preview fidelity**: `monob` only (no TMG1 round-trip). TMG1 encoding is lossless, so the
-  monochrome preview matches the on-device pixels.
+- **Preview is what the device shows**: the preview renders the 1-bit `monob` itself. TMG1
+  encoding is lossless, so the monochrome you see on screen is pixel-for-pixel what the
+  on-device OLED displays (no encode-and-decode round-trip needed to check it).
 - **External tools**: uses the system `ffmpeg` / `ffprobe` (and `tmg1` for `tmg1` export) —
   none are bundled. Each executable is found on `PATH` by default, or you can point to a
   specific path in the app settings.
