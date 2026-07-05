@@ -550,3 +550,138 @@ button:disabled {
   justify-content: flex-end;
   flex-wrap: wrap;
 }
+
+/* ---- エクスポート設定モーダル ---- */
+.modal.wide {
+  max-width: 620px;
+  width: calc(100vw - 3rem);
+  max-height: calc(100vh - 3rem);
+  overflow-y: auto;
+}
+
+.modal-title {
+  margin: 0 0 1rem;
+  font-size: 1rem;
+}
+
+/* 2カラム: 左=オプション縦並び / 右=プリセット + コマンド表示 */
+.export-cols {
+  display: flex;
+  gap: 1.4rem;
+  align-items: flex-start;
+}
+
+.export-col-left {
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  min-width: 0;
+}
+
+.export-col-right {
+  flex: 0 0 44%;
+  min-width: 0;
+}
+
+/* 見出しを左・コントロールを右に置く1行 */
+.opt-row {
+  display: grid;
+  grid-template-columns: 10em 1fr;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.opt-row > select,
+.opt-row > input {
+  width: 100%;
+  min-width: 0;
+}
+
+/* 無効化されたコントロールははっきりグレーアウト */
+#export-modal select:disabled,
+#export-modal input:disabled {
+  opacity: 0.35;
+  color: var(--muted);
+  cursor: not-allowed;
+  filter: grayscale(1);
+}
+
+/* Rice-k が無効なときは付随する "k" ラベルも一緒に淡くする */
+.rice-k-field:has(input:disabled) {
+  opacity: 0.35;
+}
+
+/* チェックボックス行は左寄せの小さなトグル */
+.opt-row.check > input[type="checkbox"] {
+  justify-self: start;
+  width: auto;
+}
+
+/* Riceモード + Rice-k を横並び（コーダ直下、最小幅） */
+.rice-pair {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  min-width: 0;
+}
+
+.rice-pair > select {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.rice-k-field {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  flex: 0 0 auto;
+}
+
+.rice-k-field > input {
+  width: 3.2em;
+}
+
+/* 右カラム: プリセットのドロップダウン/名前入力は短め */
+.export-col-right .preset-section {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+}
+
+.preset-row select.short,
+.preset-row input.short {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* コマンドオプションのライブ表示 */
+.cmd-section {
+  margin-top: 0.9rem;
+  padding-top: 0.8rem;
+  border-top: 1px solid var(--line);
+}
+
+.cmd-label {
+  font-size: 0.75rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 0.4rem;
+}
+
+.cmd-preview {
+  margin: 0;
+  padding: 0.6rem 0.7rem;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-size: 0.72rem;
+  line-height: 1.5;
+  color: var(--fg);
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-x: auto;
+}

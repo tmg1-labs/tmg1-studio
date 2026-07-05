@@ -99,7 +99,27 @@
   "dialogTmg1Filter": "tmg1 動画",
 
   "format": "形式",
-  "formatTmg1": "tmg1",
-  "formatBoth": "両方",
-  "formatRaw": "raw"
+  "formatTmg1": "TMG1",
+  "formatBoth": "TMG1 & RAW",
+  "formatRaw": "RAW",
+
+  "exportSettingsTitle": "エクスポート設定",
+  "exportAction": "エクスポート",
+  "coder": "コーダ",
+  "riceMode": "Rice モード",
+  "riceModePerLine": "行ごと",
+  "riceModePerFrame": "フレームごと",
+  "riceModeFixed": "固定",
+  "riceK": "k",
+  "keyInt": "キーフレーム間隔",
+  "scd": "シーンチェンジ検出",
+  "vfr": "可変フレームレート",
+  "prediction": "予測フィルタ",
+  "delta": "差分フレーム",
+  "index": "索引チャンク",
+  "cmdPreview": "コマンドオプション",
+  "encodePresetTitle": "エンコードプリセット",
+  "encPresetApplied": "エンコードプリセット「{name}」を適用",
+  "encPresetSaved": "エンコードプリセット「{name}」を保存",
+  "encPresetDeleted": "エンコードプリセット「{name}」を削除"
 }

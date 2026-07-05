@@ -1,9 +1,33 @@
 # 現在の作業コンテキスト
 
-最終更新: 2026-07-05（tmg1 直エクスポート実装。実機再生まで確認済み・コミット済み `8e8fb91`）
+最終更新: 2026-07-05（tmg1 エンコードパラメータの GUI 露出＋エクスポート設定ダイアログ＋encode プリセット実装。
+GUI 実操作確認済み・コミット済み）
 
 ## 今やっていること
-- **tmg1 直エクスポート実装**（2026-07-05、**実装・検証済み／コミット直前**）。
+- **tmg1 エンコードパラメータの GUI 露出 ＋ エクスポート設定ダイアログ ＋ encode プリセット**
+  （2026-07-05、**実装・検証・GUI 実操作確認済み／コミット済み**）。
+  - 背景: 前タスクの tmg1 直エクスポート（`8e8fb91`）はエンコードが CLI 既定固定で `--size`/`--fps`
+    しか渡していなかった。素材ごとに圧縮/画質を調整できるよう、エクスポート時にダイアログを出して
+    encode パラメータを触れるようにし、専用プリセット保存＋`.tmgproj` 保存で再現可能にした。
+  - 方針（ユーザー選択）: (1) 露出は**主要＋詳細**（coder/rice-mode/rice-k/key-int/scd/vfr＋折りたたみで
+    prediction/delta/index）。**msb-first/invert は非露出**（monob 前提で固定。触ると実機表示が壊れる）。
+    (2) 永続化は `.tmgproj`(version 2、欠落は既定補完)＋区間用と別の encode 専用プリセット
+    (`encode-presets.json`)。(3) ツールバーの形式セレクタ `#out-format` はダイアログに集約。
+  - 変更: backend `ffmpeg.rs`（`Tmg1Encode` 構造体＝serde default で CLI 既定に一致・`Project` に
+    `#[serde(default)] encode` 追加・`encode_tmg1()` にフラグ条件付与）。lib.rs は Project 経由のため無改修。
+    front `index.html`（`#export-modal` 新設・`#out-format` 移設）・`styles.css`（`.modal.wide`＋フォーム行）・
+    `main.ts`（`Tmg1Encode`/`DEFAULT_TMG1_ENCODE`/`EncodePreset`/`BUILTIN_ENCODE_PRESETS` 型・state.encode/
+    exportFormat・ProjectFile v2・`askExportSettings` Promise ダイアログ・`doExport` 改修・coder/rice-mode 連動
+    disable・encode プリセット一式 `initEncodePresets`）・locales 3言語に encode 系キー追加。
+  - **CLI フラグ仕様（重要）**: bool は値付き `--scd true|false` 等（`BoolishValueParser`+`num_args=1`）。
+    `--index` は真偽フラグ（真のときだけ付与、値を付けるとエラー）。`--fps` は u16（f64 を round して渡す）。
+    coder/rice-mode は kebab（rice/range, fixed/per-line/per-frame）。
+  - **検証**: `cargo check`/`cargo test`（filter 2 テスト）通過、`tsc --noEmit` EXIT=0、`vite build` 成功、
+    locale JSON 3言語 valid、実 `tmg1` で非既定組合せ（`--coder range --scd false --index` 等・rice fixed k=3）を
+    **encode→decode ロスレス往復 OK**。**GUI 実操作（ダイアログ表示・プリセット保存/適用・エクスポート・
+    プロジェクト再読込での復元）は未確認**。
+
+- **tmg1 直エクスポート実装**（2026-07-05、実装・検証・実機再生確認済み／コミット済み `8e8fb91`＋`20bca15`）。
   - 背景: 従来は monob raw までで、`.tmg1` 化は手作業で `tmg1-cli` に raw を渡す運用だった
     （下記「次にやること」に未検討として挙がっていた項目）。Studio からワンステップで `.tmg1` を
     出せるようにした。
@@ -54,8 +78,7 @@
 - タグ駆動の自動ビルド/リリース CI（GitHub Actions）。その際 `VITE_APP_VERSION` にタグを渡し、
   installer 用に tauri.conf.json / Cargo.toml の version もタグへ同期する構成にする。
 - GitHub リモート作成 + 初回 push。
-- 未検討: 「名前を付けて保存」（別名保存）、tmg1 エンコードパラメータの GUI 露出（現状は CLI 既定固定。
-  coder/rice-mode/scd/vfr/key-int 等）。
+- 未検討: 「名前を付けて保存」（別名保存）。
 - **見送り**: 組み込みプリセット名の翻訳（2026-07-05 ユーザー判断で不要）。現状の非翻訳・英語名固定の
   ままとする（永続データとの不整合を避けるため、内部キー＋表示名翻訳への移行はしない）。
 

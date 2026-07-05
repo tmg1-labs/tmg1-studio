@@ -99,7 +99,27 @@
   "dialogTmg1Filter": "tmg1 视频",
 
   "format": "格式",
-  "formatTmg1": "tmg1",
-  "formatBoth": "两者",
-  "formatRaw": "raw"
+  "formatTmg1": "TMG1",
+  "formatBoth": "TMG1 & RAW",
+  "formatRaw": "RAW",
+
+  "exportSettingsTitle": "导出设置",
+  "exportAction": "导出",
+  "coder": "编码器",
+  "riceMode": "Rice 模式",
+  "riceModePerLine": "逐行",
+  "riceModePerFrame": "逐帧",
+  "riceModeFixed": "固定",
+  "riceK": "k",
+  "keyInt": "关键帧间隔",
+  "scd": "场景切换检测",
+  "vfr": "可变帧率",
+  "prediction": "预测滤波",
+  "delta": "差分帧",
+  "index": "索引块",
+  "cmdPreview": "命令选项",
+  "encodePresetTitle": "编码预设",
+  "encPresetApplied": "已应用编码预设“{name}”",
+  "encPresetSaved": "已保存编码预设“{name}”",
+  "encPresetDeleted": "已删除编码预设“{name}”"
 }

@@ -20,6 +20,73 @@ pub struct VideoInfo {
     pub height: u32,
 }
 
+/// tmg1 エンコード設定（`tmg1 encode` のフラグに対応）。フロントから受け取る。
+/// 各フィールドは CLI 既定に一致し、欠落時は `#[serde(default)]` で既定補完される
+/// （v1 プロジェクトや encode を持たない呼び出しでも安全）。
+/// `msb_first` / `invert` は monob 直接エンコード前提で固定のため露出しない。
+#[derive(Debug, Clone, Deserialize)]
+pub struct Tmg1Encode {
+    /// エントロピー符号化器（"rice" / "range"）。
+    #[serde(default = "default_coder")]
+    pub coder: String,
+    /// Rice パラメータ決定モード（"fixed" / "per-line" / "per-frame"）。
+    #[serde(default = "default_rice_mode")]
+    pub rice_mode: String,
+    /// Fixed モードの Rice-k（0..7）。
+    #[serde(default = "default_rice_k")]
+    pub rice_k: u8,
+    /// キーフレーム間隔。
+    #[serde(default = "default_key_int")]
+    pub key_int: u16,
+    /// シーンチェンジ検出。
+    #[serde(default = "default_true")]
+    pub scd: bool,
+    /// 可変フレームレート。
+    #[serde(default = "default_true")]
+    pub vfr: bool,
+    /// 予測フィルタ。
+    #[serde(default = "default_true")]
+    pub prediction: bool,
+    /// 差分（P）フレーム。
+    #[serde(default = "default_true")]
+    pub delta: bool,
+    /// 末尾に TMGX 索引チャンクを付加。
+    #[serde(default)]
+    pub index: bool,
+}
+
+fn default_coder() -> String {
+    "rice".to_string()
+}
+fn default_rice_mode() -> String {
+    "per-line".to_string()
+}
+fn default_rice_k() -> u8 {
+    1
+}
+fn default_key_int() -> u16 {
+    60
+}
+fn default_true() -> bool {
+    true
+}
+
+impl Default for Tmg1Encode {
+    fn default() -> Self {
+        Tmg1Encode {
+            coder: default_coder(),
+            rice_mode: default_rice_mode(),
+            rice_k: default_rice_k(),
+            key_int: default_key_int(),
+            scd: true,
+            vfr: true,
+            prediction: true,
+            delta: true,
+            index: false,
+        }
+    }
+}
+
 /// エクスポート対象プロジェクト（フロントから受け取る）。
 #[derive(Debug, Deserialize)]
 pub struct Project {
@@ -28,6 +95,9 @@ pub struct Project {
     pub height: u32,
     pub fps: f64,
     pub segments: Vec<Segment>,
+    /// tmg1 エンコード設定（欠落時は既定）。
+    #[serde(default)]
+    pub encode: Tmg1Encode,
 }
 
 /// 出力形式。フロントの `<select id="out-format">` から受け取る。
@@ -318,14 +388,43 @@ fn slice_to_raw_progress(
 /// monob パック raw を PATH 上の `tmg1` CLI で tmg1 にエンコードする。
 /// codec 本体は本リポジトリに持ち込まず、ffmpeg 同様にサブプロセスへ委ねる。
 /// Studio の monob は MSB-first で CLI の既定と整合するため追加変換は不要。
-fn encode_tmg1(raw_path: &Path, width: u32, height: u32, fps: f64, out_tmg1: &Path) -> Result<(), String> {
+fn encode_tmg1(
+    raw_path: &Path,
+    width: u32,
+    height: u32,
+    fps: f64,
+    enc: &Tmg1Encode,
+    out_tmg1: &Path,
+) -> Result<(), String> {
     let size = format!("{width}x{height}");
-    let out = Command::new("tmg1")
-        .args(["encode", "--size", &size, "--fps", &fps.to_string(), "-i"])
+    // --fps は u16。Studio の fps は f64 なので四捨五入して整数で渡す。
+    let fps = (fps.round() as u16).to_string();
+    let rice_k = enc.rice_k.to_string();
+    let key_int = enc.key_int.to_string();
+    // bool フラグは CLI 側が値付き（--flag true/false）を要求する。
+    let b = |v: bool| if v { "true" } else { "false" };
+
+    let mut cmd = Command::new("tmg1");
+    cmd.args(["encode", "--size", &size, "--fps", &fps]);
+    cmd.args(["--coder", &enc.coder]);
+    cmd.args(["--key-int", &key_int]);
+    cmd.args(["--rice-mode", &enc.rice_mode]);
+    cmd.args(["--rice-k", &rice_k]);
+    cmd.args(["--scd", b(enc.scd)]);
+    cmd.args(["--vfr", b(enc.vfr)]);
+    cmd.args(["--prediction", b(enc.prediction)]);
+    cmd.args(["--delta", b(enc.delta)]);
+    // --index は真偽フラグ（値を付けるとエラー）。真のときのみ付与。
+    if enc.index {
+        cmd.arg("--index");
+    }
+    // msb-first / invert は monob 前提で固定のため渡さない（CLI 既定 true/false のまま）。
+    cmd.arg("-i")
         .arg(raw_path)
         .arg("-o")
         .arg(out_tmg1)
-        .stderr(Stdio::piped())
+        .stderr(Stdio::piped());
+    let out = cmd
         .output()
         .map_err(|e| {
             if e.kind() == std::io::ErrorKind::NotFound {
@@ -454,7 +553,7 @@ pub fn export(
     // tmg1 化（形式に含まれるときのみ）。連結済み raw を PATH の tmg1 CLI に委ねる。
     if format.wants_tmg1() {
         let _ = app.emit("tmg1-encoding", ());
-        encode_tmg1(&raw_write_path, p.width, p.height, p.fps, &tmg1_out)?;
+        encode_tmg1(&raw_write_path, p.width, p.height, p.fps, &p.encode, &tmg1_out)?;
     }
 
     // tmg1 のみのときは一時 raw を掃除する。

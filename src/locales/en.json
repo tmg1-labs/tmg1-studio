@@ -99,7 +99,27 @@
   "dialogTmg1Filter": "tmg1 video",
 
   "format": "Format",
-  "formatTmg1": "tmg1",
-  "formatBoth": "both",
-  "formatRaw": "raw"
+  "formatTmg1": "TMG1",
+  "formatBoth": "TMG1 & RAW",
+  "formatRaw": "RAW",
+
+  "exportSettingsTitle": "Export settings",
+  "exportAction": "Export",
+  "coder": "Coder",
+  "riceMode": "Rice mode",
+  "riceModePerLine": "Per line",
+  "riceModePerFrame": "Per frame",
+  "riceModeFixed": "Fixed",
+  "riceK": "k",
+  "keyInt": "Keyframe interval",
+  "scd": "Scene-change detection",
+  "vfr": "Variable frame rate",
+  "prediction": "Prediction filter",
+  "delta": "Delta (P) frames",
+  "index": "Index chunk",
+  "cmdPreview": "Command options",
+  "encodePresetTitle": "Encode presets",
+  "encPresetApplied": "Applied encode preset \"{name}\"",
+  "encPresetSaved": "Saved encode preset \"{name}\"",
+  "encPresetDeleted": "Deleted encode preset \"{name}\""
 }

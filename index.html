@@ -19,13 +19,6 @@
       <label class="spec project-only"><span data-i18n="width">幅</span> <input id="out-w" type="number" min="8" step="8" value="128" /></label>
       <label class="spec project-only"><span data-i18n="height">高さ</span> <input id="out-h" type="number" min="1" step="1" value="64" /></label>
       <label class="spec project-only"><span data-i18n="fps">fps</span> <input id="out-fps" type="number" min="1" step="1" value="15" /></label>
-      <label class="spec project-only"><span data-i18n="format">形式</span>
-        <select id="out-format">
-          <option value="tmg1" data-i18n="formatTmg1">tmg1</option>
-          <option value="both" data-i18n="formatBoth">両方</option>
-          <option value="raw" data-i18n="formatRaw">raw</option>
-        </select>
-      </label>
       <button id="export-btn" class="primary project-only" data-i18n="export" disabled>エクスポート</button>
       <div class="settings-wrap">
         <button id="settings-btn" class="icon-btn" data-i18n-title="settings" title="設定" aria-label="設定">⚙</button>
@@ -139,6 +132,84 @@
       <input id="scrub" class="scrub" type="range" min="0" max="1000" step="1" value="0" disabled />
       <p id="status" class="status"></p>
     </footer>
+
+    <div id="export-modal" class="modal-overlay" hidden>
+      <div class="modal wide">
+        <h2 class="modal-title" data-i18n="exportSettingsTitle">エクスポート設定</h2>
+
+        <div class="export-cols">
+          <div class="export-col-left">
+            <div class="opt-row"><span data-i18n="format">形式</span>
+              <select id="out-format">
+                <option value="tmg1" data-i18n="formatTmg1">TMG1</option>
+                <option value="raw" data-i18n="formatRaw">RAW</option>
+                <option value="both" data-i18n="formatBoth">TMG1 &amp; RAW</option>
+              </select>
+            </div>
+            <div class="opt-row"><span data-i18n="coder">コーダ</span>
+              <select id="enc-coder">
+                <option value="rice">Rice</option>
+                <option value="range">Range</option>
+              </select>
+            </div>
+            <div class="opt-row rice-row"><span data-i18n="riceMode">Rice</span>
+              <div class="rice-pair">
+                <select id="enc-rice-mode">
+                  <option value="per-line" data-i18n="riceModePerLine">行ごと</option>
+                  <option value="per-frame" data-i18n="riceModePerFrame">フレームごと</option>
+                  <option value="fixed" data-i18n="riceModeFixed">固定</option>
+                </select>
+                <label class="rice-k-field"><span data-i18n="riceK">k</span>
+                  <input id="enc-rice-k" type="number" min="0" max="7" step="1" value="1" />
+                </label>
+              </div>
+            </div>
+            <div class="opt-row"><span data-i18n="keyInt">キーフレーム間隔</span>
+              <input id="enc-key-int" type="number" min="1" step="1" value="60" />
+            </div>
+            <div class="opt-row check"><span data-i18n="scd">scd</span>
+              <input id="enc-scd" type="checkbox" checked />
+            </div>
+            <div class="opt-row check"><span data-i18n="vfr">vfr</span>
+              <input id="enc-vfr" type="checkbox" checked />
+            </div>
+            <div class="opt-row check"><span data-i18n="prediction">prediction</span>
+              <input id="enc-prediction" type="checkbox" checked />
+            </div>
+            <div class="opt-row check"><span data-i18n="delta">delta</span>
+              <input id="enc-delta" type="checkbox" checked />
+            </div>
+            <div class="opt-row check"><span data-i18n="index">index</span>
+              <input id="enc-index" type="checkbox" />
+            </div>
+          </div>
+
+          <div class="export-col-right">
+            <div class="preset-section">
+              <h2 data-i18n="encodePresetTitle">エンコードプリセット</h2>
+              <div class="preset-row">
+                <select id="enc-preset-list" class="short"></select>
+                <button id="enc-preset-apply" data-i18n="apply">適用</button>
+              </div>
+              <div class="preset-row">
+                <input id="enc-preset-name" class="short" data-i18n-placeholder="presetNamePlaceholder" placeholder="プリセット名" />
+                <button id="enc-preset-save" data-i18n="save">保存</button>
+                <button id="enc-preset-delete" class="danger" data-i18n="delete">削除</button>
+              </div>
+            </div>
+            <div class="cmd-section">
+              <div class="cmd-label" data-i18n="cmdPreview">コマンドオプション</div>
+              <pre class="cmd-preview"><code id="enc-cmd"></code></pre>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-actions">
+          <button id="export-go" class="primary" data-i18n="exportAction">エクスポート</button>
+          <button id="export-cancel" data-i18n="cancel">キャンセル</button>
+        </div>
+      </div>
+    </div>
 
     <div id="confirm-modal" class="modal-overlay" hidden>
       <div class="modal">

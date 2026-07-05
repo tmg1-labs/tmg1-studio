@@ -52,6 +52,9 @@ interface ProjectFile {
   segments: Segment[];
   play_start: number;
   play_end: number;
+  // version 2 で追加（v1 では欠落 → 読込時に既定補完）。
+  export_format?: ExportFormat;
+  encode?: Tmg1Encode;
 }
 
 // 区間パラメータのプリセット（tauri-plugin-store で永続化）。
@@ -72,6 +75,48 @@ const BUILTIN_PRESETS: Preset[] = [
   { name: "High contrast + error diffusion", contrast: 1.3, level_lo: 0, level_hi: 255, dither: "ed" },
 ];
 
+// tmg1 エンコード設定（backend の Tmg1Encode / `tmg1 encode` フラグに対応）。
+// msb_first / invert は monob 前提で固定のため露出しない（含めない）。
+type Coder = "rice" | "range";
+type RiceMode = "fixed" | "per-line" | "per-frame";
+interface Tmg1Encode {
+  coder: Coder;
+  rice_mode: RiceMode;
+  rice_k: number; // 0..7
+  key_int: number; // u16
+  scd: boolean;
+  vfr: boolean;
+  prediction: boolean;
+  delta: boolean;
+  index: boolean;
+}
+
+// CLI 既定に一致（backend の Tmg1Encode::default と同値）。
+const DEFAULT_TMG1_ENCODE: Tmg1Encode = {
+  coder: "rice",
+  rice_mode: "per-line",
+  rice_k: 1,
+  key_int: 60,
+  scd: true,
+  vfr: true,
+  prediction: true,
+  delta: true,
+  index: false,
+};
+
+type ExportFormat = "tmg1" | "both" | "raw";
+
+// エンコード設定のプリセット（区間用 Preset とは別ストアで永続化）。
+interface EncodePreset extends Tmg1Encode {
+  name: string;
+}
+
+const BUILTIN_ENCODE_PRESETS: EncodePreset[] = [
+  { name: "Default (Rice / per-line)", ...DEFAULT_TMG1_ENCODE },
+  { name: "Max compression (Range)", ...DEFAULT_TMG1_ENCODE, coder: "range" },
+  { name: "Fixed k=1 (fast)", ...DEFAULT_TMG1_ENCODE, rice_mode: "fixed", rice_k: 1 },
+];
+
 // ---- 状態 ----
 const state = {
   inputPath: null as string | null,
@@ -85,6 +130,8 @@ const state = {
   playStart: 0, // 再生範囲の開始（秒）
   playEnd: 0, // 再生範囲の終了（秒）
   playing: false,
+  exportFormat: "tmg1" as ExportFormat, // エクスポート形式（ダイアログで選択）
+  encode: { ...DEFAULT_TMG1_ENCODE } as Tmg1Encode, // tmg1 エンコード設定
 };
 
 let objectUrl: string | null = null; // レンダリング済み再生 mp4 の Blob URL（停止しても保持）
@@ -148,6 +195,25 @@ const presetNameEl = $("preset-name") as HTMLInputElement;
 const presetApplyBtn = $("preset-apply") as HTMLButtonElement;
 const presetSaveBtn = $("preset-save") as HTMLButtonElement;
 const presetDeleteBtn = $("preset-delete") as HTMLButtonElement;
+// エクスポート設定モーダル
+const exportModal = $("export-modal");
+const encCoderEl = $("enc-coder") as HTMLSelectElement;
+const encRiceModeEl = $("enc-rice-mode") as HTMLSelectElement;
+const encRiceKEl = $("enc-rice-k") as HTMLInputElement;
+const encKeyIntEl = $("enc-key-int") as HTMLInputElement;
+const encScdEl = $("enc-scd") as HTMLInputElement;
+const encVfrEl = $("enc-vfr") as HTMLInputElement;
+const encPredictionEl = $("enc-prediction") as HTMLInputElement;
+const encDeltaEl = $("enc-delta") as HTMLInputElement;
+const encIndexEl = $("enc-index") as HTMLInputElement;
+const encCmdEl = $("enc-cmd");
+const exportGoBtn = $("export-go") as HTMLButtonElement;
+const exportCancelBtn = $("export-cancel") as HTMLButtonElement;
+const encPresetListEl = $("enc-preset-list") as HTMLSelectElement;
+const encPresetNameEl = $("enc-preset-name") as HTMLInputElement;
+const encPresetApplyBtn = $("enc-preset-apply") as HTMLButtonElement;
+const encPresetSaveBtn = $("enc-preset-save") as HTMLButtonElement;
+const encPresetDeleteBtn = $("enc-preset-delete") as HTMLButtonElement;
 const contrastVal = $("contrast-val");
 const loVal = $("lo-val");
 const hiVal = $("hi-val");
@@ -207,6 +273,8 @@ function applyProject(
     width: number;
     height: number;
     fps: number;
+    exportFormat: ExportFormat;
+    encode: Tmg1Encode;
   },
 ) {
   state.inputPath = path;
@@ -225,10 +293,14 @@ function applyProject(
     state.segments = loaded.segments.map((s) => ({ ...s, id: newSegId() }));
     state.playStart = clamp(loaded.playStart, 0, info.duration);
     state.playEnd = clamp(loaded.playEnd, 0, info.duration);
+    state.exportFormat = loaded.exportFormat;
+    state.encode = loaded.encode;
   } else {
     state.segments = [makeSegment(0, info.duration)];
     state.playStart = 0;
     state.playEnd = info.duration;
+    state.exportFormat = "tmg1";
+    state.encode = { ...DEFAULT_TMG1_ENCODE };
   }
   stopPlayback();
   discardRender();
@@ -372,7 +444,7 @@ async function closeProject() {
 async function writeProject(target: string) {
   if (!state.inputPath) return;
   const data: ProjectFile = {
-    version: 1,
+    version: 2,
     input_path: state.inputPath,
     width: Number(outW.value),
     height: Number(outH.value),
@@ -380,6 +452,8 @@ async function writeProject(target: string) {
     segments: state.segments,
     play_start: state.playStart,
     play_end: state.playEnd,
+    export_format: state.exportFormat,
+    encode: state.encode,
   };
   await invoke("save_project", {
     path: target,
@@ -442,6 +516,9 @@ async function loadProject() {
       width: data.width,
       height: data.height,
       fps: data.fps,
+      // v1 プロジェクト（欠落）は既定補完。encode は既定とマージして将来のフィールド欠落にも耐える。
+      exportFormat: data.export_format ?? "tmg1",
+      encode: { ...DEFAULT_TMG1_ENCODE, ...(data.encode ?? {}) },
     });
     setStatus(t("projectLoaded", { path: selected }));
   } catch (e) {
@@ -1039,6 +1116,119 @@ rangeClearBtn.addEventListener("click", () => {
 // ---- エクスポート ----
 exportBtn.addEventListener("click", doExport);
 
+// エクスポート設定モーダルの Promise 解決（askUnsaved と同型）。
+let exportModalResolve: ((v: boolean) => void) | null = null;
+
+// state.encode / state.exportFormat をダイアログの各コントロールへ反映。
+function fillExportDialog() {
+  outFormat.value = state.exportFormat;
+  encCoderEl.value = state.encode.coder;
+  encRiceModeEl.value = state.encode.rice_mode;
+  encRiceKEl.value = String(state.encode.rice_k);
+  encKeyIntEl.value = String(state.encode.key_int);
+  encScdEl.checked = state.encode.scd;
+  encVfrEl.checked = state.encode.vfr;
+  encPredictionEl.checked = state.encode.prediction;
+  encDeltaEl.checked = state.encode.delta;
+  encIndexEl.checked = state.encode.index;
+  syncEncodeControlsEnabled();
+  updateCmdPreview();
+}
+
+// ダイアログの現在値から `tmg1 encode` の実コマンドを組み立てて表示する。
+// backend の encode_tmg1 と同じ規則（bool は値付き、index は真のときだけ付与、fps は整数）。
+function updateCmdPreview() {
+  if (!encCmdEl) return;
+  const e = readEncodeFromDialog();
+  const w = Number(outW.value) || 0;
+  const h = Number(outH.value) || 0;
+  const fps = Math.round(Number(outFps.value) || 0);
+  const b = (v: boolean) => (v ? "true" : "false");
+  const parts = [
+    "tmg1 encode",
+    `--size ${w}x${h}`,
+    `--fps ${fps}`,
+    `--coder ${e.coder}`,
+    `--key-int ${e.key_int}`,
+    `--rice-mode ${e.rice_mode}`,
+    `--rice-k ${e.rice_k}`,
+    `--scd ${b(e.scd)}`,
+    `--vfr ${b(e.vfr)}`,
+    `--prediction ${b(e.prediction)}`,
+    `--delta ${b(e.delta)}`,
+  ];
+  if (e.index) parts.push("--index");
+  encCmdEl.textContent = parts.join(" ");
+}
+
+// ダイアログのコントロールから Tmg1Encode を組み立てる。
+function readEncodeFromDialog(): Tmg1Encode {
+  return {
+    coder: encCoderEl.value as Coder,
+    rice_mode: encRiceModeEl.value as RiceMode,
+    rice_k: clamp(Number(encRiceKEl.value) || 0, 0, 7),
+    key_int: Math.max(1, Number(encKeyIntEl.value) || 60),
+    scd: encScdEl.checked,
+    vfr: encVfrEl.checked,
+    prediction: encPredictionEl.checked,
+    delta: encDeltaEl.checked,
+    index: encIndexEl.checked,
+  };
+}
+
+// coder=range では rice-mode/rice-k を、rice-mode≠fixed では rice-k を無効化。
+function syncEncodeControlsEnabled() {
+  const isRice = encCoderEl.value === "rice";
+  encRiceModeEl.disabled = !isRice;
+  encRiceKEl.disabled = !isRice || encRiceModeEl.value !== "fixed";
+}
+
+// 各コントロールの変更でコマンドプレビューを更新。coder/rice-mode は連動 disable も。
+const encControls = [
+  outFormat,
+  encCoderEl,
+  encRiceModeEl,
+  encRiceKEl,
+  encKeyIntEl,
+  encScdEl,
+  encVfrEl,
+  encPredictionEl,
+  encDeltaEl,
+  encIndexEl,
+];
+for (const el of encControls) {
+  el.addEventListener("change", () => {
+    syncEncodeControlsEnabled();
+    updateCmdPreview();
+  });
+  el.addEventListener("input", updateCmdPreview);
+}
+
+// エクスポート設定ダイアログを開く。OK=true / キャンセル=false を返す。
+function askExportSettings(): Promise<boolean> {
+  fillExportDialog();
+  exportModal.hidden = false;
+  return new Promise((resolve) => {
+    exportModalResolve = resolve;
+  });
+}
+
+function resolveExportModal(ok: boolean) {
+  exportModal.hidden = true;
+  const r = exportModalResolve;
+  exportModalResolve = null;
+  if (r) r(ok);
+}
+
+exportGoBtn.addEventListener("click", () => resolveExportModal(true));
+exportCancelBtn.addEventListener("click", () => resolveExportModal(false));
+exportModal.addEventListener("click", (e) => {
+  if (e.target === exportModal) resolveExportModal(false);
+});
+document.addEventListener("keydown", (e) => {
+  if (!exportModal.hidden && e.key === "Escape") resolveExportModal(false);
+});
+
 async function doExport() {
   if (!state.inputPath || state.exporting) return;
   const w = Number(outW.value);
@@ -1049,8 +1239,24 @@ async function doExport() {
     return;
   }
 
+  // エクスポート設定ダイアログ（形式 + encode パラメータ + プリセット）。
+  const ok = await askExportSettings();
+  if (!ok) return;
+
+  // ダイアログの内容を state に取り込み（変更があれば未保存扱い）。
+  const nextEncode = readEncodeFromDialog();
+  const nextFormat = outFormat.value as ExportFormat;
+  if (
+    nextFormat !== state.exportFormat ||
+    JSON.stringify(nextEncode) !== JSON.stringify(state.encode)
+  ) {
+    markDirty();
+  }
+  state.encode = nextEncode;
+  state.exportFormat = nextFormat;
+  const format = nextFormat;
+
   // 出力形式（tmg1 / both / raw）。tmg1 のみ拡張子・フィルタを .tmg1 に、それ以外は .raw。
-  const format = outFormat.value;
   const tmg1Only = format === "tmg1";
   const target = await save({
     defaultPath: tmg1Only ? "output.tmg1" : "output.raw",
@@ -1071,6 +1277,7 @@ async function doExport() {
       height: h,
       fps,
       segments: state.segments,
+      encode: state.encode,
     };
     const result = await invoke<ExportResult>("export", {
       project,
@@ -1199,6 +1406,88 @@ presetDeleteBtn.addEventListener("click", async () => {
   setStatus(t("presetDeleted", { name }));
 });
 
+// ---- エンコードプリセット（区間用とは別ストアで永続化）----
+let encPresetStore: Store | null = null;
+let encPresets: EncodePreset[] = [];
+
+async function initEncodePresets() {
+  try {
+    encPresetStore = await load("encode-presets.json", {
+      defaults: { presets: BUILTIN_ENCODE_PRESETS },
+      autoSave: true,
+    });
+    const saved = await encPresetStore.get<EncodePreset[]>("presets");
+    encPresets = saved ?? [...BUILTIN_ENCODE_PRESETS];
+    populateEncPresetList();
+  } catch (e) {
+    setStatus(t("presetLoadFailed", { err: String(e) }), true);
+  }
+}
+
+function populateEncPresetList() {
+  encPresetListEl.innerHTML = "";
+  for (const p of encPresets) {
+    const opt = document.createElement("option");
+    opt.value = p.name;
+    opt.textContent = p.name;
+    encPresetListEl.appendChild(opt);
+  }
+}
+
+async function persistEncPresets() {
+  if (!encPresetStore) return;
+  await encPresetStore.set("presets", encPresets);
+  await encPresetStore.save();
+}
+
+// 選択中エンコードプリセットをダイアログの各コントロールへ適用（区間には触れない）。
+encPresetApplyBtn.addEventListener("click", () => {
+  const p = encPresets.find((x) => x.name === encPresetListEl.value);
+  if (!p) return;
+  outFormat.value = state.exportFormat; // 形式はプリセット対象外（現状維持）
+  encCoderEl.value = p.coder;
+  encRiceModeEl.value = p.rice_mode;
+  encRiceKEl.value = String(p.rice_k);
+  encKeyIntEl.value = String(p.key_int);
+  encScdEl.checked = p.scd;
+  encVfrEl.checked = p.vfr;
+  encPredictionEl.checked = p.prediction;
+  encDeltaEl.checked = p.delta;
+  encIndexEl.checked = p.index;
+  syncEncodeControlsEnabled();
+  updateCmdPreview();
+  setStatus(t("encPresetApplied", { name: p.name }));
+});
+
+// 現在のダイアログ設定を名前を付けて保存（同名は上書き）。
+encPresetSaveBtn.addEventListener("click", async () => {
+  const name = encPresetNameEl.value.trim();
+  if (!name) {
+    setStatus(t("presetNameRequired"), true);
+    return;
+  }
+  const preset: EncodePreset = { name, ...readEncodeFromDialog() };
+  const idx = encPresets.findIndex((x) => x.name === name);
+  if (idx >= 0) encPresets[idx] = preset;
+  else encPresets.push(preset);
+  await persistEncPresets();
+  populateEncPresetList();
+  encPresetListEl.value = name;
+  encPresetNameEl.value = "";
+  setStatus(t("encPresetSaved", { name }));
+});
+
+// 選択中エンコードプリセットを削除。
+encPresetDeleteBtn.addEventListener("click", async () => {
+  const name = encPresetListEl.value;
+  const idx = encPresets.findIndex((x) => x.name === name);
+  if (idx < 0) return;
+  encPresets.splice(idx, 1);
+  await persistEncPresets();
+  populateEncPresetList();
+  setStatus(t("encPresetDeleted", { name }));
+});
+
 // ---- 設定メニュー（歯車）----
 appVersionEl.textContent = `v${__APP_VERSION__}`;
 
@@ -1284,3 +1573,4 @@ saveBtn.addEventListener("click", onSaveClick);
 closeBtn.addEventListener("click", closeProject);
 initLocale();
 initPresets();
+initEncodePresets();
