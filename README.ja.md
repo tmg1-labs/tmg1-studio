@@ -1,28 +1,28 @@
 # TMG1 Studio
 
-動画を**区間ごとに**1bit モノクロ化するクロスプラットフォームなデスクトップ GUI。
-[TMG1](https://github.com/tmg1-labs) パイプライン（ESP32 OLED 再生）向け。
+動画を**区間ごとに**1bit モノクロ化するクロスプラットフォームなデスクトップ GUI です。
+[TMG1](https://github.com/tmg1-labs) パイプライン（ESP32 OLED 再生）向けです。
 
-全体を一律設定でモノクロ化すると、ディテール不足かノイズ増加のどちらかに寄る。
+全体を一律設定でモノクロ化すると、ディテール不足かノイズ増加のどちらかに寄ります。
 TMG1 Studio はタイムラインを区間に分割し、コントラスト / レベル絞り / ディザを区間ごとに
-調整できる。1bit `monob` の出力そのものをプレビューしながら追い込める。
+調整できます。1bit `monob` の出力そのものをプレビューしながら追い込めます。
 
 English: [README.md](README.md)
 
 ## 機能
 
-- 動画を読み込みタイムラインをスクラブ。任意時刻の **1bit `monob` 出力**をプレビュー。
-- タイムラインを区間に分割 / 境界をドラッグ / 区間を結合削除。
+- 動画を読み込みタイムラインをスクラブし、任意時刻の **1bit `monob` 出力**をプレビューできます。
+- タイムラインを区間に分割したり、境界をドラッグしたり、区間を結合・削除したりできます。
 - 区間ごとのパラメータ:
   - **コントラスト**（`eq=contrast`）
-  - **レベル絞り** — 下限未満を黒潰し、上限超を白飛ばし（暗部の孤立白点・前景の欠け対策）。
+  - **レベル絞り** — 下限未満を黒潰し、上限超を白飛ばしします（暗部の孤立白点・前景の欠け対策）。
   - **ディザ** — Bayer / 誤差拡散 / なし（`-sws_dither`）。
-- エクスポートは各区間を個別設定でトランスコードし raw を無劣化連結。出力形式は `raw` /
+- エクスポートは各区間を個別設定でトランスコードし、raw を無劣化連結します。出力形式は `raw` /
   `tmg1` / 両方から選べ、`tmg1` はアプリが `tmg1` CLI を呼んでそのまま再生可能な `.tmg1` を
-  生成する（別途 encode 不要）。目視確認用の近傍拡大 `.preview.mp4` は任意出力（既定オフ）。
+  生成します（別途 encode 不要）。目視確認用の近傍拡大 `.preview.mp4` は任意出力です（既定オフ）。
 
 プレビューとエクスポートは**同一のフィルタチェーン組み立て**（`src-tauri/src/filter.rs`）を
-使うため、見た目と出力が一致する。
+使うため、見た目と出力が一致します。
 
 ## アーキテクチャ
 
@@ -35,10 +35,10 @@ tmg1-studio/
 └── src/                  ... Web フロントエンド (Vanilla TS): タイムライン / パラメータ / プレビュー
 ```
 
-- **プレビュー忠実度**: `monob` のみ（TMG1 ラウンドトリップはしない）。TMG1 エンコードは
-  ロスレスなので、モノクロプレビューが実機ピクセルと一致する。
-- **外部ツール**: システムの `ffmpeg` / `ffprobe`（`tmg1` 出力時は `tmg1` も）を使う。いずれも
-  同梱しない。既定では `PATH` から探すが、アプリ設定で個別の実行パスを指定することもできる。
+- **プレビュー忠実度**: `monob` のみです（TMG1 ラウンドトリップはしません）。TMG1 エンコードは
+  ロスレスなので、モノクロプレビューが実機ピクセルと一致します。
+- **外部ツール**: システムの `ffmpeg` / `ffprobe`（`tmg1` 出力時は `tmg1` も）を使います。いずれも
+  同梱しません。既定では `PATH` から探しますが、アプリ設定で個別の実行パスを指定することもできます。
 
 ## 前提
 
@@ -64,30 +64,24 @@ cd src-tauri && cargo test
 
 `v*` タグ（例 `v0.2.0`）を push すると `.github/workflows/release.yml` が起動し、Windows(x64) /
 macOS(Apple Silicon) / Linux(x64) の各ネイティブランナーでインストーラをビルドして **ドラフト**の
-GitHub Release に添付する。タグの version はビルド時に `package.json` / `tauri.conf.json` /
+GitHub Release に添付します。タグの version はビルド時に `package.json` / `tauri.conf.json` /
 `Cargo.toml` へ同期され（`scripts/sync-version.mjs`）、`VITE_APP_VERSION` として表示バージョンにも
-渡る。ドラフトを確認してから公開する。
+渡ります。ドラフトを確認してから公開してください。
 
 > インストーラは**コード署名なし**のため、初回起動時に macOS Gatekeeper / Windows SmartScreen が
-> 警告を出す（macOS は右クリック→開く、Windows は「詳細情報→実行」で起動できる）。
+> 警告を出します（macOS は右クリック→開く、Windows は「詳細情報→実行」で起動できます）。
 
-push/PR のチェック（`tsc` + `cargo test` + `clippy`）は `.github/workflows/ci.yml` が別途担う。
+push/PR のチェック（`tsc` + `cargo test` + `clippy`）は `.github/workflows/ci.yml` が別途担います。
 
 ## エクスポート出力
 
-選んだ形式に応じて出力される:
+選んだ形式に応じて出力されます:
 
-- `<name>.tmg1` — そのまま再生可能なストリーム。`tmg1` CLI を呼んでエンコードする（形式 `tmg1` / 両方）。
-- `<name>.raw` — パックされた `monob` フレーム。自分で `tmg1-cli encode` に渡す用（形式 `raw` / 両方）。
-- `<name>.preview.mp4` — 6 倍近傍拡大の目視確認用（任意出力・既定オフ）。
+- `<name>.tmg1` — そのまま再生可能なストリームです。`tmg1` CLI を呼んでエンコードします（形式 `tmg1` / 両方）。
+- `<name>.raw` — パックされた `monob` フレームです。自分で `tmg1-cli encode` に渡す用です（形式 `raw` / 両方）。
+- `<name>.preview.mp4` — 6 倍近傍拡大の目視確認用です（任意出力・既定オフ）。
 
-> 幅は 8 の倍数にすること（monob のバイト境界）。
-
-## 関連リポジトリ
-
-- [`tmg1-codec`](https://github.com/tmg1-labs/tmg1-codec) — 共通 C++ コーデックライブラリ
-- [`tmg1-cli`](https://github.com/tmg1-labs/tmg1-cli) — Rust CLI（encode/decode/transcode）
-- [`tmg1-esp32-demo`](https://github.com/tmg1-labs/tmg1-esp32-demo) — ESP32 OLED リファレンス再生
+> 幅は 8 の倍数にしてください（monob のバイト境界）。
 
 ## ライセンス
 

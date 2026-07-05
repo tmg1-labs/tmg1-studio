@@ -86,12 +86,6 @@ Depending on the chosen format:
 
 > Width must be a multiple of 8 (monob byte boundary).
 
-## Related
-
-- [`tmg1-codec`](https://github.com/tmg1-labs/tmg1-codec) — shared C++ codec library
-- [`tmg1-cli`](https://github.com/tmg1-labs/tmg1-cli) — Rust CLI (encode/decode/transcode)
-- [`tmg1-esp32-demo`](https://github.com/tmg1-labs/tmg1-esp32-demo) — ESP32 OLED reference player
-
 ## License
 
 MIT
