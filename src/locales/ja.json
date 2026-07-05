@@ -55,7 +55,7 @@
   "statusStart": "「新規作成」または「開く」から始めてください",
   "probing": "ffprobe で解析中…",
   "loaded": "読み込み完了",
-  "fileInfo": "{name}  ({w}x{h}, {fps}fps, {dur})",
+  "fileProps": "{w}×{h}　{fps}fps　{dur}",
   "widthMul8": "幅は 8 の倍数にしてください（monob のバイト境界）",
   "rangeEmpty": "再生範囲が空です",
   "rendering": "再生用にレンダリング中…",

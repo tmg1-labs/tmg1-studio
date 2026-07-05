@@ -130,13 +130,93 @@ h2 {
   color: var(--fg);
 }
 
-.file-info {
+/* 読み込んだ動画のパス。長い場合は中間を省略（ディレクトリ側を末尾省略で縮め、
+   ファイル名は常に表示）。フルパスは title 属性でホバー表示。 */
+.file-path {
   font-size: 0.85rem;
   color: var(--muted);
-  white-space: nowrap;
+  display: flex;
+  min-width: 4em;
+  flex: 0 1 auto;
+  overflow: hidden;
+}
+
+.file-path .fp-head {
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 40ch;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.file-path .fp-tail {
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+
+/* ツールバーのボタン・スペック・アイコンは縮めない（狭幅でも変形させない。
+   縮むのはファイルパスだけ）。 */
+.toolbar > button,
+.toolbar > .spec,
+.toolbar > .info-badge,
+.toolbar > .settings-wrap {
+  flex: 0 0 auto;
+}
+
+/* 元動画スペックの情報アイコン。ホバー/フォーカスでツールチップ表示。 */
+.info-badge[hidden] {
+  display: none;
+}
+
+.info-badge {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.15rem;
+  height: 1.15rem;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  color: var(--muted);
+  cursor: help;
+  user-select: none;
+}
+
+/* 「i」グリフだけを斜体セリフに。ツールチップには継承させない。 */
+.info-icon {
+  font-size: 0.7rem;
+  font-style: italic;
+  font-family: Georgia, "Times New Roman", serif;
+}
+
+.info-badge:hover,
+.info-badge:focus-visible {
+  border-color: var(--accent);
+  color: var(--fg);
+  outline: none;
+}
+
+.info-tip {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  display: none;
+  white-space: nowrap;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 0.35rem 0.6rem;
+  font-size: 0.8rem;
+  font-style: normal;
+  color: var(--fg);
+  font-variant-numeric: tabular-nums;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+  z-index: 50;
+}
+
+.info-badge:hover .info-tip,
+.info-badge:focus-visible .info-tip,
+.info-badge:focus-within .info-tip {
+  display: block;
 }
 
 .spec {
@@ -170,6 +250,7 @@ h2 {
   min-height: 0;
   display: flex;
   flex-direction: column;
+  overflow-y: auto;
 }
 
 .pane-head {
@@ -351,6 +432,7 @@ button {
   padding: 0.4rem 0.8rem;
   font-size: 0.85rem;
   cursor: pointer;
+  white-space: nowrap;
 }
 
 button:hover:not(:disabled) {
@@ -498,9 +580,38 @@ button:disabled {
   border-radius: 3px;
 }
 
+/* つまみ幅を固定（14px＝半径7px）。トラックを左右に半径分はみ出させることで、
+   つまみ中心の可動域を 0%〜100%（＝赤線の位置）まで広げ、両端で一致させる。 */
 .scrub {
-  width: 100%;
-  margin-top: 0.5rem;
+  width: calc(100% + 14px);
+  margin: 0.5rem -7px 0;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 14px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.scrub::-webkit-slider-runnable-track {
+  height: 4px;
+  background: var(--line);
+  border-radius: 2px;
+}
+
+.scrub::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: none;
+  margin-top: -5px; /* 4px トラックの中央に */
+}
+
+.scrub:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .status {

@@ -12,13 +12,17 @@
     <header class="toolbar">
       <button id="new-btn" class="primary no-project-only" data-i18n="new">新規作成</button>
       <button id="load-btn" class="no-project-only" data-i18n="open">開く</button>
-      <button id="save-btn" class="project-only">保存</button>
-      <button id="close-btn" class="project-only" data-i18n="close">閉じる</button>
-      <span id="file-info" class="file-info project-only" data-i18n="noVideo">動画が未読み込みです</span>
+      <span id="file-path" class="file-path project-only" data-i18n="noVideo">動画が未読み込みです</span>
+      <span id="file-info-badge" class="info-badge project-only" tabindex="0" hidden>
+        <span class="info-icon" aria-hidden="true">i</span>
+        <span id="file-props" class="info-tip" role="tooltip"></span>
+      </span>
       <div class="spacer project-only"></div>
       <label class="spec project-only"><span data-i18n="width">幅</span> <input id="out-w" type="number" min="8" step="8" value="128" /></label>
       <label class="spec project-only"><span data-i18n="height">高さ</span> <input id="out-h" type="number" min="1" step="1" value="64" /></label>
       <label class="spec project-only"><span data-i18n="fps">fps</span> <input id="out-fps" type="number" min="1" step="1" value="15" /></label>
+      <button id="save-btn" class="project-only">保存</button>
+      <button id="close-btn" class="project-only" data-i18n="close">閉じる</button>
       <button id="export-btn" class="primary project-only" data-i18n="export" disabled>エクスポート</button>
       <div class="settings-wrap">
         <button id="settings-btn" class="icon-btn" data-i18n-title="settings" title="設定" aria-label="設定">⚙</button>

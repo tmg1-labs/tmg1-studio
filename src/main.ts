@@ -167,7 +167,9 @@ const modalCancelBtn = $("modal-cancel") as HTMLButtonElement;
 const langSelect = $("lang-select") as HTMLSelectElement;
 const splitBtn = $("split-btn") as HTMLButtonElement;
 const deleteBtn = $("delete-btn") as HTMLButtonElement;
-const fileInfo = $("file-info");
+const filePathEl = $("file-path");
+const filePropsEl = $("file-props");
+const fileInfoBadge = $("file-info-badge");
 const outW = $("out-w") as HTMLInputElement;
 const outH = $("out-h") as HTMLInputElement;
 const outFps = $("out-fps") as HTMLInputElement;
@@ -333,22 +335,57 @@ function applyProject(
 // 保存ボタンのラベル: 未保存の新規は「保存」、保存先が確定していれば「上書き」。
 function updateSaveLabel() {
   saveBtn.textContent = projectPath ? t("overwrite") : t("save");
+  updateWindowTitle();
+}
+
+// ウィンドウタイトルに編集中のプロジェクト名（未保存なら動画名）を表示する。
+function updateWindowTitle() {
+  const base = "TMG1 Studio";
+  let title = base;
+  if (state.inputPath) {
+    const name = projectPath
+      ? (projectPath.split(/[\\/]/).pop() ?? projectPath)
+      : (state.inputPath.split(/[\\/]/).pop() ?? state.inputPath);
+    title = `${name} — ${base}`;
+  }
+  void getCurrentWindow().setTitle(title);
 }
 
 // ファイル情報表示（state から再構築できるので言語切替時にも呼べる）。
 function updateFileInfo() {
   if (!state.inputPath) {
-    fileInfo.textContent = t("noVideo");
+    filePathEl.textContent = t("noVideo");
+    filePathEl.removeAttribute("title");
+    filePropsEl.textContent = "";
+    fileInfoBadge.hidden = true;
     return;
   }
-  const name = state.inputPath.split(/[\\/]/).pop() ?? state.inputPath;
-  fileInfo.textContent = t("fileInfo", {
-    name,
+  setFilePath(state.inputPath);
+  filePropsEl.textContent = t("fileProps", {
     w: state.inputW,
     h: state.inputH,
     fps: state.inputFps.toFixed(2),
     dur: fmtTime(state.duration),
   });
+  fileInfoBadge.hidden = false;
+}
+
+// フルパスをディレクトリ(head)＋ファイル名(tail)に分けて表示する。
+// head は CSS で末尾省略、tail は常に全表示 → 実質的に中間が省略される。
+function setFilePath(full: string) {
+  const m = full.match(/^(.*[\\/])([^\\/]+)$/);
+  const head = document.createElement("span");
+  head.className = "fp-head";
+  const tail = document.createElement("span");
+  tail.className = "fp-tail";
+  if (m) {
+    head.textContent = m[1];
+    tail.textContent = m[2];
+  } else {
+    tail.textContent = full; // 区切りなし（ファイル名のみ）
+  }
+  filePathEl.replaceChildren(head, tail);
+  filePathEl.title = full; // ホバーでフルパス
 }
 
 // 再生ボタンのラベル（再生状態で切替。言語切替時にも呼ぶ）。
@@ -435,6 +472,7 @@ async function closeProject() {
   previewImg.style.display = "none";
   previewImg.removeAttribute("src");
   updateFileInfo();
+  updateWindowTitle();
   document.body.classList.add("no-project");
   setStatus(t("projectClosed"));
 }
@@ -556,7 +594,7 @@ function renderTimeline() {
     block.addEventListener("mousedown", (e) => {
       // ハンドル操作でなければ、その区間の先頭へ playhead を移動して選択。
       if ((e.target as HTMLElement).classList.contains("seg-handle")) return;
-      setPlayhead(seg.start_sec + (seg.end_sec - seg.start_sec) / 2);
+      setPlayhead(seg.start_sec);
     });
     timelineEl.appendChild(block);
 
@@ -599,7 +637,7 @@ function renderTimeline() {
   const ph = document.createElement("div");
   ph.className = "playhead";
   ph.id = "playhead-marker";
-  ph.style.left = `${(state.playhead / dur) * 100}%`;
+  ph.style.left = playheadLeftCss(state.playhead / dur);
   timelineEl.appendChild(ph);
 
   updateReadout();
@@ -696,6 +734,13 @@ function startBoundaryDrag(e: MouseEvent, rightIdx: number) {
 }
 
 // ---- playhead / scrub ----
+// 赤線はトラック両端（0%〜100%）にきっちり届かせる。つまみ側を左右に半径分
+// はみ出させる（CSS の .scrub 参照）ことで、つまみ中心が赤線に一致する。
+function playheadLeftCss(frac: number): string {
+  const f = Math.min(1, Math.max(0, frac));
+  return `${(f * 100).toFixed(4)}%`;
+}
+
 function setPlayhead(t: number, doPreview = true) {
   state.playhead = Math.min(state.duration, Math.max(0, t));
   const dur = state.duration || 1;
@@ -721,7 +766,7 @@ scrubEl.addEventListener("input", () => {
     // 範囲外へドラッグしても表示はクランプ後の位置に補正。
     scrubEl.value = String(Math.round((t / dur) * 1000));
     const marker = document.getElementById("playhead-marker");
-    if (marker) marker.style.left = `${(t / dur) * 100}%`;
+    if (marker) marker.style.left = playheadLeftCss(t / dur);
     updateReadout();
   } else {
     setPlayhead(t);
@@ -961,7 +1006,7 @@ function followTick() {
   // シーク操作中はスクラブ/マーカーをユーザに委ね、追従は上書きしない。
   if (!seeking) {
     const marker = document.getElementById("playhead-marker");
-    if (marker) marker.style.left = `${(t / dur) * 100}%`;
+    if (marker) marker.style.left = playheadLeftCss(t / dur);
     scrubEl.value = String(Math.round((t / dur) * 1000));
     updateReadout();
   }

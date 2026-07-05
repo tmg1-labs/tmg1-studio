@@ -55,7 +55,7 @@
   "statusStart": "Start with \"New\" or \"Open\"",
   "probing": "Analyzing with ffprobe…",
   "loaded": "Loaded",
-  "fileInfo": "{name}  ({w}x{h}, {fps}fps, {dur})",
+  "fileProps": "{w}×{h}   {fps}fps   {dur}",
   "widthMul8": "Width must be a multiple of 8 (monob byte boundary)",
   "rangeEmpty": "Playback range is empty",
   "rendering": "Rendering for playback…",

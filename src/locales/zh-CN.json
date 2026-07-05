@@ -55,7 +55,7 @@
   "statusStart": "请从“新建”或“打开”开始",
   "probing": "正在用 ffprobe 分析…",
   "loaded": "加载完成",
-  "fileInfo": "{name}  ({w}x{h}, {fps}fps, {dur})",
+  "fileProps": "{w}×{h}　{fps}fps　{dur}",
   "widthMul8": "宽度必须是 8 的倍数（monob 字节边界）",
   "rangeEmpty": "播放范围为空",
   "rendering": "正在渲染以供播放…",
