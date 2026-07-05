@@ -368,11 +368,7 @@ fn slice_to_raw_progress(
         if let Some(rest) = line.strip_prefix("frame=") {
             if let Ok(f) = rest.trim().parse::<u64>() {
                 let cum = frames_before + f;
-                let pct = if total_frames > 0 {
-                    ((cum * 100) / total_frames).min(100) as i32
-                } else {
-                    0
-                };
+                let pct = (cum * 100).checked_div(total_frames).map_or(0, |v| v.min(100)) as i32;
                 if pct != *last_pct {
                     *last_pct = pct;
                     let _ = app.emit("range-progress", RangeProgress { percent: pct as u32 });
@@ -455,7 +451,7 @@ pub fn export(
     format: ExportFormat,
     preview: bool,
 ) -> Result<ExportResult, String> {
-    if p.width % 8 != 0 {
+    if !p.width.is_multiple_of(8) {
         return Err(format!(
             "幅 {} は 8 の倍数にしてください（monob のバイト境界のため）",
             p.width
@@ -575,11 +571,7 @@ pub fn export(
         let _ = std::fs::remove_file(&raw_write_path);
     }
 
-    let frames = if frame_bytes > 0 {
-        total_bytes / frame_bytes
-    } else {
-        0
-    };
+    let frames = total_bytes.checked_div(frame_bytes).unwrap_or(0);
 
     Ok(ExportResult {
         raw_path: format.wants_raw().then(|| raw_out.to_string_lossy().into_owned()),
@@ -594,7 +586,7 @@ pub fn export(
 /// 再生範囲 [start, end) を区間ごとの設定で monob 化・連結し、ループ再生用の
 /// mp4 バイト列を返す。フロントは Blob URL にして `<video loop>` で再生する。
 pub fn render_range(app: &AppHandle, p: &Project, start: f64, end: f64) -> Result<Vec<u8>, String> {
-    if p.width % 8 != 0 {
+    if !p.width.is_multiple_of(8) {
         return Err(format!(
             "幅 {} は 8 の倍数にしてください（monob のバイト境界のため）",
             p.width

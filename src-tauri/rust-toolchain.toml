@@ -1,0 +1,7 @@
+# CI の clippy を安定させるため Rust ツールチェーンを固定する。
+# 浮動 stable だと新しい clippy がリリースされるたびに新 lint で `-D warnings` が
+# 突然赤くなるため、バージョンを明示して lint ドリフトを防ぐ。
+# 更新時はローカルで `cargo clippy --all-targets -- -D warnings` を通してから上げること。
+[toolchain]
+channel = "1.96.0"
+components = ["clippy", "rustfmt"]
