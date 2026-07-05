@@ -1,8 +1,27 @@
 # 現在の作業コンテキスト
 
-最終更新: 2026-07-05（テスト/チェック CI 実装＋GitHub Actions 実走 green・annotations 0 確認。push 済み `cf82ace`/`9c04944`/`5c15f85`）
+最終更新: 2026-07-05（外部実行ファイル（ffmpeg/ffprobe/tmg1）のパスを設定で指定可能に。GUI 実操作確認済み・コミット直前）
 
 ## 今やっていること
+- **外部実行ファイル（ffmpeg / ffprobe / tmg1）の実行パスを設定で指定可能に**（2026-07-05、
+  実装・`cargo test`/`clippy`/`npm run build` 通過・**GUI 実操作確認済み**）。
+  - 背景: 従来は 3 バイナリとも PATH 前提で、PATH に無いと probe/preview/export が失敗していた
+    （known-issues の「ffmpeg/ffprobe が PATH に無い」「tmg1 が PATH に必要」）。設定で明示指定できるようにした。
+  - 方針（ユーザー選択）: 配線は **Rust 側で `settings.json`（tauri-plugin-store、言語設定と共用）を直読み**。
+    各 invoke の署名を増やさず最小差分。空欄/未設定なら従来どおり PATH 上のコマンド名にフォールバック。
+  - 変更: backend `ffmpeg.rs`（`ExePaths { ffmpeg, ffprobe, tmg1 }` ＋ `ExePaths::load(app)`＝
+    `StoreExt::store("settings.json")` から `ffmpegPath`/`ffprobePath`/`tmg1Path` を読み、空文字は既定へ。
+    `Command::new("ffmpeg")` 等のハードコードを `&exe.*` へ置換し全 ffmpeg 系関数へ `&ExePaths` を配線）。
+    `lib.rs`（`probe_video`/`render_preview` に `AppHandle` 引数追加＝Tauri 自動注入でフロント呼び出しは無変更。
+    各 command の `spawn_blocking` 内で `ExePaths::load` して渡す）。front `index.html`（設定メニューに
+    「実行ファイルのパス」セクション＝3 入力＋「参照」ボタン）・`main.ts`（`initExePaths`＝store から読込・
+    入力反映・change/参照で保存。キー名は Rust と一致）・`styles.css`（メニュー幅拡張・パス行/`.mini-btn`）・
+    locales 3 言語（`exePaths`/`exePathsHint`/`browse`＋プレースホルダは実行ファイル別に 3 キー
+    `exePathPlaceholderFfmpeg`/`Ffprobe`/`Tmg1`）。
+  - **検証**: `cargo test`（filter 2）/`cargo clippy --all-targets -D warnings` EXIT 0/`npm run build`
+    （tsc + vite）成功/locale JSON 3 言語 valid。**GUI 実操作でも動作確認済み（2026-07-05、ユーザー確認）**。
+
+## 過去にやっていること
 - **テスト/チェック CI（GitHub Actions）実装**（2026-07-05、ローカル検証済み・**未コミット**）。
   - 方針（ユーザー選択）: (1) 範囲=**テスト/チェック CI をまず先に**（リリース CI は別途）、
     (2) clippy は**4件修正＋ゲート維持＋ツールチェーン固定**。
@@ -143,7 +162,8 @@
 ## 一時的な制約・注意事項
 - リモート = `tmg1-labs/tmg1-studio`（push 済み）。CI は未整備。
 - CI 未整備。テストは手元で `cargo test`（filter.rs のユニットテスト）。
-- ffmpeg/ffprobe は PATH 前提。実行環境に無いと probe/preview/export が失敗する。
+- ffmpeg/ffprobe/tmg1 は PATH 既定だが、**設定メニューの「実行ファイルのパス」で絶対パス指定も可能**
+  （2026-07-05〜）。未設定なら従来どおり PATH を探し、無ければ probe/preview/export が失敗する。
 - `tauri dev` 実行中は exe ロックで `cargo build` が「アクセス拒否」になる → 検証は `cargo check`。
 
 ## 決定事項（やらないと決めたこと）

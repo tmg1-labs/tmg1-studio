@@ -3,20 +3,24 @@ mod filter;
 
 use base64::{engine::general_purpose::STANDARD, Engine};
 
-use ffmpeg::{ExportFormat, ExportResult, Project, VideoInfo};
+use ffmpeg::{ExePaths, ExportFormat, ExportResult, Project, VideoInfo};
 use filter::Segment;
 
 /// 入力動画の情報を取得する。
 #[tauri::command]
-async fn probe_video(path: String) -> Result<VideoInfo, String> {
-    tauri::async_runtime::spawn_blocking(move || ffmpeg::probe(&path))
-        .await
-        .map_err(|e| format!("タスク実行失敗: {e}"))?
+async fn probe_video(app: tauri::AppHandle, path: String) -> Result<VideoInfo, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let exe = ExePaths::load(&app);
+        ffmpeg::probe(&exe, &path)
+    })
+    .await
+    .map_err(|e| format!("タスク実行失敗: {e}"))?
 }
 
 /// 指定時刻のプレビューフレームを PNG data URL 文字列で返す。
 #[tauri::command]
 async fn render_preview(
+    app: tauri::AppHandle,
     path: String,
     time_sec: f64,
     segment: Segment,
@@ -24,7 +28,8 @@ async fn render_preview(
     height: u32,
 ) -> Result<String, String> {
     let png = tauri::async_runtime::spawn_blocking(move || {
-        ffmpeg::render_preview(&path, time_sec, &segment, width, height)
+        let exe = ExePaths::load(&app);
+        ffmpeg::render_preview(&exe, &path, time_sec, &segment, width, height)
     })
     .await
     .map_err(|e| format!("タスク実行失敗: {e}"))??;
@@ -40,7 +45,8 @@ async fn render_range(
     end_sec: f64,
 ) -> Result<tauri::ipc::Response, String> {
     let bytes = tauri::async_runtime::spawn_blocking(move || {
-        ffmpeg::render_range(&app, &project, start_sec, end_sec)
+        let exe = ExePaths::load(&app);
+        ffmpeg::render_range(&app, &exe, &project, start_sec, end_sec)
     })
     .await
     .map_err(|e| format!("タスク実行失敗: {e}"))??;
@@ -69,7 +75,8 @@ async fn export(
     preview: bool,
 ) -> Result<ExportResult, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        ffmpeg::export(&app, &project, &out_path, format, preview)
+        let exe = ExePaths::load(&app);
+        ffmpeg::export(&app, &exe, &project, &out_path, format, preview)
     })
     .await
     .map_err(|e| format!("タスク実行失敗: {e}"))?

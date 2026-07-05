@@ -8,13 +8,26 @@
 ### ffmpeg / ffprobe が PATH に無い
 - **症状**: probe_video / render_preview / export が失敗する。
 - **原因**: バイナリを同梱せず、システム PATH 上の `ffmpeg` / `ffprobe` を呼ぶ設計のため。
-- **回避策**: 実行環境に ffmpeg をインストールし PATH を通す。
+- **回避策**: 実行環境に ffmpeg をインストールし PATH を通す。**または設定メニューの「実行ファイルのパス」で
+  ffmpeg/ffprobe の絶対パスを指定する**（2026-07-05 追加。下記「実行パスの設定は Rust 側で store 直読み」参照）。
 
 ### tmg1 直エクスポートには `tmg1` CLI が PATH に必要
 - **症状**: 形式に「tmg1」「両方」を選んだ export が「tmg1 CLI が見つかりません」で失敗する。
 - **原因**: ffmpeg と同じく `.tmg1` 生成は PATH 上の `tmg1` バイナリをサブプロセスで呼ぶ設計（非同梱）。
 - **回避策**: `tmg1-cli` を `cargo install --path ../tmg1-cli`（または PATH の通る場所へ配置）で用意する。
-  raw のみの export は `tmg1` 不要。
+  raw のみの export は `tmg1` 不要。**または設定メニューの「実行ファイルのパス」で tmg1 の絶対パスを指定する**
+  （2026-07-05 追加）。
+
+### 実行パスの設定は Rust 側で store 直読み（invoke 署名を増やさない）
+- **メモ（設計）**: ffmpeg/ffprobe/tmg1 の実行パスは設定メニューでフロントが `settings.json`
+  （tauri-plugin-store、言語設定と共用）へ `ffmpegPath`/`ffprobePath`/`tmg1Path` として保存し、
+  **Rust 側が `StoreExt::store("settings.json")` で直読み**する（`ExePaths::load(app)`）。invoke の引数を
+  増やさない代わりに、`probe_video`/`render_preview` は `AppHandle` 引数を足した（Tauri が自動注入するため
+  フロントの呼び出しコードは無変更）。空文字/未設定キーは既定（PATH 上のコマンド名）へフォールバック。
+- **落とし穴（キー名の一致）**: store のキー名は **Rust の `ExePaths::load` と front の `EXE_PATH_KEYS`
+  で文字列一致必須**（`ffmpegPath` 等）。片方だけ変えると黙って PATH 既定に落ちる（無反応に見える）。
+- **メモ（即時反映）**: 呼び出しごとに `ExePaths::load`（store 読込）するので設定変更は再起動不要で次の
+  probe/export から効く。store 読込は軽量なので毎回でも問題なし。
 
 ### 出力幅が 8 の倍数でない
 - **症状**: monob 出力のバイト境界がずれ、実機表示が崩れる。

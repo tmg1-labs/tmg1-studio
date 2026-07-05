@@ -32,6 +32,31 @@
             <span data-i18n="language">言語</span>
             <select id="lang-select"></select>
           </div>
+          <div class="settings-sep"></div>
+          <div class="settings-head" data-i18n="exePaths">実行ファイルのパス</div>
+          <div class="settings-hint" data-i18n="exePathsHint">空欄なら PATH から探します。</div>
+          <div class="settings-path-row">
+            <label for="ffmpeg-path">ffmpeg</label>
+            <div class="path-input">
+              <input id="ffmpeg-path" type="text" spellcheck="false" data-i18n-placeholder="exePathPlaceholderFfmpeg" />
+              <button id="ffmpeg-path-browse" class="mini-btn" data-i18n="browse">参照</button>
+            </div>
+          </div>
+          <div class="settings-path-row">
+            <label for="ffprobe-path">ffprobe</label>
+            <div class="path-input">
+              <input id="ffprobe-path" type="text" spellcheck="false" data-i18n-placeholder="exePathPlaceholderFfprobe" />
+              <button id="ffprobe-path-browse" class="mini-btn" data-i18n="browse">参照</button>
+            </div>
+          </div>
+          <div class="settings-path-row">
+            <label for="tmg1-path">tmg1</label>
+            <div class="path-input">
+              <input id="tmg1-path" type="text" spellcheck="false" data-i18n-placeholder="exePathPlaceholderTmg1" />
+              <button id="tmg1-path-browse" class="mini-btn" data-i18n="browse">参照</button>
+            </div>
+          </div>
+          <div class="settings-sep"></div>
           <div class="settings-row">
             <span data-i18n="version">バージョン</span>
             <span id="app-version" class="mono">—</span>

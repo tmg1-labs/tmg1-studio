@@ -13,6 +13,12 @@
   "settings": "设置",
   "version": "版本",
   "language": "语言",
+  "exePaths": "可执行文件路径",
+  "exePathsHint": "留空则使用 PATH。",
+  "exePathPlaceholderFfmpeg": "使用 PATH（例如 C:\\ffmpeg\\bin\\ffmpeg.exe）",
+  "exePathPlaceholderFfprobe": "使用 PATH（例如 C:\\ffmpeg\\bin\\ffprobe.exe）",
+  "exePathPlaceholderTmg1": "使用 PATH（例如 C:\\Users\\me\\.cargo\\bin\\tmg1.exe）",
+  "browse": "浏览",
 
   "previewTitle": "预览（monob 输出）",
   "zoomLabel": "显示",

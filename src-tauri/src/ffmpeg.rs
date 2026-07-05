@@ -8,8 +8,56 @@ use std::process::{Command, Stdio};
 
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter};
+use tauri_plugin_store::StoreExt;
 
 use crate::filter::{build_chain, Chain, Segment};
+
+/// 外部実行ファイル（ffmpeg / ffprobe / tmg1）のパス。
+/// 設定で明示指定があればそれを、無ければ PATH 上のコマンド名を使う。
+/// フロントが `settings.json`（tauri-plugin-store）へ書いた値を Rust 側で直読みする。
+pub struct ExePaths {
+    pub ffmpeg: String,
+    pub ffprobe: String,
+    pub tmg1: String,
+}
+
+impl Default for ExePaths {
+    fn default() -> Self {
+        // 既定は PATH 解決（従来どおりの挙動）。
+        ExePaths {
+            ffmpeg: "ffmpeg".to_string(),
+            ffprobe: "ffprobe".to_string(),
+            tmg1: "tmg1".to_string(),
+        }
+    }
+}
+
+impl ExePaths {
+    /// `settings.json` から各実行パスを読む。キーが無い / 空文字なら既定（PATH）に戻す。
+    /// ストアが開けない場合も既定にフォールバックする。
+    pub fn load(app: &AppHandle) -> Self {
+        let mut p = ExePaths::default();
+        if let Ok(store) = app.store("settings.json") {
+            let get = |key: &str| -> Option<String> {
+                store
+                    .get(key)
+                    .and_then(|v| v.as_str().map(str::to_string))
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty())
+            };
+            if let Some(v) = get("ffmpegPath") {
+                p.ffmpeg = v;
+            }
+            if let Some(v) = get("ffprobePath") {
+                p.ffprobe = v;
+            }
+            if let Some(v) = get("tmg1Path") {
+                p.tmg1 = v;
+            }
+        }
+        p
+    }
+}
 
 /// ffprobe で得た入力動画の情報。
 #[derive(Debug, Serialize)]
@@ -162,8 +210,8 @@ fn parse_rational(s: &str) -> f64 {
 }
 
 /// ffprobe で入力動画のサイズ・fps・尺を取得する。
-pub fn probe(path: &str) -> Result<VideoInfo, String> {
-    let out = Command::new("ffprobe")
+pub fn probe(exe: &ExePaths, path: &str) -> Result<VideoInfo, String> {
+    let out = Command::new(&exe.ffprobe)
         .args([
             "-v",
             "error",
@@ -207,6 +255,7 @@ pub fn probe(path: &str) -> Result<VideoInfo, String> {
 /// 指定時刻のフレームを、その区間のフィルタチェーンで monob 化し PNG バイト列で返す。
 /// build_chain を通すのでプレビューはエクスポートと同一の絵になる。
 pub fn render_preview(
+    exe: &ExePaths,
     path: &str,
     time_sec: f64,
     seg: &Segment,
@@ -214,7 +263,7 @@ pub fn render_preview(
     height: u32,
 ) -> Result<Vec<u8>, String> {
     let chain = build_chain(seg, width, height);
-    let out = Command::new("ffmpeg")
+    let out = Command::new(&exe.ffmpeg)
         .args([
             "-hide_banner",
             "-loglevel",
@@ -262,6 +311,7 @@ fn preview_mp4_path(raw_path: &Path) -> PathBuf {
 /// 入力の [start, start+dur) を chain で monob raw 化して out に書き出す。
 /// -ss(入力側=高速シーク) + -t(出力尺) で切り出し、-r で CFR 化して連結整合を取る。
 fn slice_to_raw(
+    exe: &ExePaths,
     input: &str,
     chain: &Chain,
     start: f64,
@@ -269,7 +319,7 @@ fn slice_to_raw(
     fps: f64,
     out: &std::path::Path,
 ) -> Result<(), String> {
-    let status = Command::new("ffmpeg")
+    let status = Command::new(&exe.ffmpeg)
         .args([
             "-hide_banner",
             "-loglevel",
@@ -308,6 +358,7 @@ fn slice_to_raw(
 #[allow(clippy::too_many_arguments)]
 fn slice_to_raw_progress(
     app: &AppHandle,
+    exe: &ExePaths,
     input: &str,
     chain: &Chain,
     start: f64,
@@ -318,7 +369,7 @@ fn slice_to_raw_progress(
     total_frames: u64,
     last_pct: &mut i32,
 ) -> Result<(), String> {
-    let mut child = Command::new("ffmpeg")
+    let mut child = Command::new(&exe.ffmpeg)
         .args([
             "-hide_banner",
             "-loglevel",
@@ -389,6 +440,7 @@ fn slice_to_raw_progress(
 /// codec 本体は本リポジトリに持ち込まず、ffmpeg 同様にサブプロセスへ委ねる。
 /// Studio の monob は MSB-first で CLI の既定と整合するため追加変換は不要。
 fn encode_tmg1(
+    exe: &ExePaths,
     raw_path: &Path,
     width: u32,
     height: u32,
@@ -404,7 +456,7 @@ fn encode_tmg1(
     // bool フラグは CLI 側が値付き（--flag true/false）を要求する。
     let b = |v: bool| if v { "true" } else { "false" };
 
-    let mut cmd = Command::new("tmg1");
+    let mut cmd = Command::new(&exe.tmg1);
     cmd.args(["encode", "--size", &size, "--fps", &fps]);
     cmd.args(["--coder", &enc.coder]);
     cmd.args(["--key-int", &key_int]);
@@ -428,7 +480,7 @@ fn encode_tmg1(
         .output()
         .map_err(|e| {
             if e.kind() == std::io::ErrorKind::NotFound {
-                "tmg1 CLI が見つかりません。PATH に tmg1 を通してください（`cargo install` 等）".to_string()
+                "tmg1 CLI が見つかりません。PATH に通すか、設定で tmg1 の実行パスを指定してください".to_string()
             } else {
                 format!("tmg1 encode を実行できませんでした: {e}")
             }
@@ -446,6 +498,7 @@ fn encode_tmg1(
 /// preview が true のときのみ目視用 mp4 も生成する。
 pub fn export(
     app: &AppHandle,
+    exe: &ExePaths,
     p: &Project,
     out_path: &str,
     format: ExportFormat,
@@ -499,7 +552,7 @@ pub fn export(
         let dur = (seg.end_sec - seg.start_sec).max(0.0);
         let segfile = tmp.join(format!("seg{i}.raw"));
 
-        slice_to_raw(&p.input_path, &chain, seg.start_sec, dur, p.fps, &segfile)
+        slice_to_raw(exe, &p.input_path, &chain, seg.start_sec, dur, p.fps, &segfile)
             .map_err(|e| format!("区間 {} のエンコードに失敗: {e}", i + 1))?;
 
         let bytes = std::fs::read(&segfile).map_err(|e| format!("区間 raw 読み込み失敗: {e}"))?;
@@ -518,7 +571,7 @@ pub fn export(
     let mp4_path = if preview {
         let mp4_path = preview_mp4_path(&raw_out);
         let size = format!("{}x{}", p.width, p.height);
-        let mp4_status = Command::new("ffmpeg")
+        let mp4_status = Command::new(&exe.ffmpeg)
             .args([
                 "-hide_banner",
                 "-loglevel",
@@ -560,7 +613,7 @@ pub fn export(
     // 成功後に出力ファイルサイズを取得し、レポートの圧縮率算出に使う。
     let tmg1_bytes = if format.wants_tmg1() {
         let _ = app.emit("tmg1-encoding", ());
-        encode_tmg1(&raw_write_path, p.width, p.height, p.fps, &p.encode, &tmg1_out)?;
+        encode_tmg1(exe, &raw_write_path, p.width, p.height, p.fps, &p.encode, &tmg1_out)?;
         std::fs::metadata(&tmg1_out).map(|m| m.len()).ok()
     } else {
         None
@@ -585,7 +638,13 @@ pub fn export(
 
 /// 再生範囲 [start, end) を区間ごとの設定で monob 化・連結し、ループ再生用の
 /// mp4 バイト列を返す。フロントは Blob URL にして `<video loop>` で再生する。
-pub fn render_range(app: &AppHandle, p: &Project, start: f64, end: f64) -> Result<Vec<u8>, String> {
+pub fn render_range(
+    app: &AppHandle,
+    exe: &ExePaths,
+    p: &Project,
+    start: f64,
+    end: f64,
+) -> Result<Vec<u8>, String> {
     if !p.width.is_multiple_of(8) {
         return Err(format!(
             "幅 {} は 8 の倍数にしてください（monob のバイト境界のため）",
@@ -638,6 +697,7 @@ pub fn render_range(app: &AppHandle, p: &Project, start: f64, end: f64) -> Resul
         let segfile = tmp.join(format!("s{i}.raw"));
         slice_to_raw_progress(
             app,
+            exe,
             &p.input_path,
             &chain,
             s,
@@ -680,7 +740,7 @@ pub fn render_range(app: &AppHandle, p: &Project, start: f64, end: f64) -> Resul
     let mp4 = tmp.join("range.mp4");
     let size = format!("{}x{}", p.width, p.height);
     let vf = format!("scale={vw}:{vh}:flags=neighbor");
-    let status = Command::new("ffmpeg")
+    let status = Command::new(&exe.ffmpeg)
         .args([
             "-hide_banner",
             "-loglevel",

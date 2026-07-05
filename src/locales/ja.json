@@ -13,6 +13,12 @@
   "settings": "設定",
   "version": "バージョン",
   "language": "言語",
+  "exePaths": "実行ファイルのパス",
+  "exePathsHint": "空欄なら PATH から探します。",
+  "exePathPlaceholderFfmpeg": "PATH を使用（例: C:\\ffmpeg\\bin\\ffmpeg.exe）",
+  "exePathPlaceholderFfprobe": "PATH を使用（例: C:\\ffmpeg\\bin\\ffprobe.exe）",
+  "exePathPlaceholderTmg1": "PATH を使用（例: C:\\Users\\me\\.cargo\\bin\\tmg1.exe）",
+  "browse": "参照",
 
   "previewTitle": "プレビュー（monob 出力）",
   "zoomLabel": "表示",

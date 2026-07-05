@@ -169,6 +169,12 @@ const modalSaveBtn = $("modal-save") as HTMLButtonElement;
 const modalDiscardBtn = $("modal-discard") as HTMLButtonElement;
 const modalCancelBtn = $("modal-cancel") as HTMLButtonElement;
 const langSelect = $("lang-select") as HTMLSelectElement;
+const ffmpegPathInput = $("ffmpeg-path") as HTMLInputElement;
+const ffprobePathInput = $("ffprobe-path") as HTMLInputElement;
+const tmg1PathInput = $("tmg1-path") as HTMLInputElement;
+const ffmpegPathBrowse = $("ffmpeg-path-browse") as HTMLButtonElement;
+const ffprobePathBrowse = $("ffprobe-path-browse") as HTMLButtonElement;
+const tmg1PathBrowse = $("tmg1-path-browse") as HTMLButtonElement;
 const splitBtn = $("split-btn") as HTMLButtonElement;
 const deleteBtn = $("delete-btn") as HTMLButtonElement;
 const filePathEl = $("file-path");
@@ -1760,11 +1766,67 @@ langSelect.addEventListener("change", () => {
   if (isLocale(v)) changeLocale(v);
 });
 
+// ---- 外部実行ファイルのパス ----
+// settings.json（言語設定と共用のストア）へ ffmpeg / ffprobe / tmg1 の実行パスを保存する。
+// 空欄なら Rust 側は PATH 上のコマンド名にフォールバックする（キー名は Rust の ExePaths::load と一致）。
+const EXE_PATH_KEYS = {
+  ffmpeg: "ffmpegPath",
+  ffprobe: "ffprobePath",
+  tmg1: "tmg1Path",
+} as const;
+
+async function persistExePath(key: string, value: string) {
+  if (!settingsStore) return;
+  await settingsStore.set(key, value.trim());
+  await settingsStore.save();
+}
+
+// 入力欄の値をストアへ保存（change で確定。空欄可）。
+function wireExePathInput(input: HTMLInputElement, key: string) {
+  input.addEventListener("change", () => {
+    void persistExePath(key, input.value);
+  });
+}
+
+// 「参照」でファイル選択ダイアログを開き、選んだパスを入力欄へ入れて保存する。
+function wireExePathBrowse(btn: HTMLButtonElement, input: HTMLInputElement, key: string) {
+  btn.addEventListener("click", async () => {
+    const picked = await open({ multiple: false, directory: false });
+    if (typeof picked === "string") {
+      input.value = picked;
+      await persistExePath(key, picked);
+    }
+  });
+}
+
+async function initExePaths() {
+  // settingsStore は initLocale で確保されるが、順序に依存しないよう自前でも確保する（idempotent）。
+  if (!settingsStore) {
+    try {
+      settingsStore = await load("settings.json", { defaults: {}, autoSave: true });
+    } catch {
+      return; // ストア不可なら空欄のまま（Rust 側が PATH で継続）。
+    }
+  }
+  const map: [HTMLInputElement, HTMLButtonElement, string][] = [
+    [ffmpegPathInput, ffmpegPathBrowse, EXE_PATH_KEYS.ffmpeg],
+    [ffprobePathInput, ffprobePathBrowse, EXE_PATH_KEYS.ffprobe],
+    [tmg1PathInput, tmg1PathBrowse, EXE_PATH_KEYS.tmg1],
+  ];
+  for (const [input, btn, key] of map) {
+    const saved = (await settingsStore.get<string>(key)) ?? "";
+    input.value = saved;
+    wireExePathInput(input, key);
+    wireExePathBrowse(btn, input, key);
+  }
+}
+
 // ---- 初期化 ----
 newBtn.addEventListener("click", openVideo);
 loadBtn.addEventListener("click", loadProject);
 saveBtn.addEventListener("click", onSaveClick);
 closeBtn.addEventListener("click", closeProject);
 initLocale();
+initExePaths();
 initPresets();
 initEncodePresets();

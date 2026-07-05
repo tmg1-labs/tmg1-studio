@@ -13,6 +13,12 @@
   "settings": "Settings",
   "version": "Version",
   "language": "Language",
+  "exePaths": "Executable paths",
+  "exePathsHint": "Leave blank to use PATH.",
+  "exePathPlaceholderFfmpeg": "Use PATH (e.g. C:\\ffmpeg\\bin\\ffmpeg.exe)",
+  "exePathPlaceholderFfprobe": "Use PATH (e.g. C:\\ffmpeg\\bin\\ffprobe.exe)",
+  "exePathPlaceholderTmg1": "Use PATH (e.g. C:\\Users\\me\\.cargo\\bin\\tmg1.exe)",
+  "browse": "Browse",
 
   "previewTitle": "Preview (monob output)",
   "zoomLabel": "View",
