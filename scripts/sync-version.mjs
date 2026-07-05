@@ -37,11 +37,13 @@ patchJson("src-tauri/tauri.conf.json");
   const relPath = "src-tauri/Cargo.toml";
   const path = join(repoRoot, relPath);
   const text = readFileSync(path, "utf8");
-  const replaced = text.replace(/^version = ".*"$/m, `version = "${version}"`);
-  if (replaced === text) {
+  const re = /^version = ".*"$/m;
+  // 「行が無い」ことだけをエラーにする。既存 version == タグ値の再リリース時は置換が
+  // no-op になり replaced === text となるが、これを「行が無い」と誤検出しない。
+  if (!re.test(text)) {
     console.error(`sync-version: no 'version = "..."' line found in ${relPath}`);
     process.exit(1);
   }
-  writeFileSync(path, replaced);
+  writeFileSync(path, text.replace(re, `version = "${version}"`));
   console.log(`sync-version: ${relPath} -> ${version}`);
 }
