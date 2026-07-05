@@ -91,6 +91,15 @@
   スクラブ→再生ではキャッシュを維持して再レンダリングしない（意図どおり）。停止は一時停止で Blob を保持し、
   完全破棄は `discardRender`（プロジェクト読込/クローズ時のみ）。
 
+### マルチリポ workspace で git が別リポに走る（cd を明示しないと primary へ）
+- **症状**: `git commit` が tmg1-studio ではなく別リポ（primary の tmg1-esp32-demo）で実行され、
+  「no changes added」や無関係ファイルが対象になる。実際にコミットが誤リポで空振りした。
+- **原因**: この workspace は tmg1-esp32-demo が primary、tmg1-studio は additional。
+  `cd tmg1-studio && git ...` の**複合コマンドで cd した cwd は次のコマンド呼び出しに持ち越されない**
+  ため、cd 無しの git は primary リポで走る。
+- **回避策**: tmg1-studio に対する git は**毎回 `cd /d/workspace/TsuMuGi/tmg1-studio && git ...` を明示**。
+  実行前に `git status` を挟んで対象リポを確認すると安全。
+
 ## 地雷・禁止事項
 - プレビューとエクスポートでフィルタチェーン構築を分岐させない（WYSIWYG が崩れる。
   修正は `filter.rs` に一本化する）。

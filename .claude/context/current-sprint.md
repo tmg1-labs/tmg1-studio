@@ -1,8 +1,40 @@
 # 現在の作業コンテキスト
 
-最終更新: 2026-07-05（プレビューmp4を任意出力化。コミット済み `491cd85`）
+最終更新: 2026-07-05（エクスポート結果レポート＋進捗バー実装、GitHub 初回 push。コミット済み `800f2dc`/`402c586`、push 済み）
 
 ## 今やっていること
+- **GitHub リモート作成 ＋ 初回 push 完了**（2026-07-05、push 済み）。
+  - リモート `origin` = `https://github.com/tmg1-labs/tmg1-studio.git`（他の兄弟リポと同じ HTTPS、
+    組織は**複数形 `tmg1-labs`**。ユーザー指定の "tmg1-lab" 単数形は実在せず `tmg1-labs` が正）。
+  - 空リポへ `main` を push、upstream 追跡設定済み。これで「リモート未設定」制約は解消。
+
+- **エクスポート進捗のプログレスバー表示**（2026-07-05、実装・`tsc` 通過／コミット済み `402c586`）。
+  - 方針（ユーザー選択）: (1) 粒度=**区間単位ステップ**（既存 `export-progress {done,total}` を流用）、
+    (2) 表示=**既存の再生用バー `render-progress` を流用**、(3) tmg1 エンコード工程（フレーム進捗なし）は
+    **不定（パルス）表示**。
+  - 変更: `index.html`（バーの label/track に id 付与）、`styles.css`（`.render-progress-track.indeterminate`
+    のスライドアニメ `@keyframes render-progress-slide`）、`main.ts`（`showRenderProgress(labelKey)` で
+    ラベル差替、`setRenderProgress` は毎回 indeterminate 解除、`setRenderProgressIndeterminate(labelKey)`
+    追加。`doExport` 開始で `showRenderProgress("exporting")`、`export-progress` で done/total→0–100%、
+    `tmg1-encoding` で不定表示、`finally` で `hideRenderProgress`）。**backend 無変更**（既存イベント活用）。
+  - バーは再生レンダリングと共用（同時実行なし）。ラベルは表示のたび動的セット＝セッション中の言語切替に追従。
+  - i18n キー追加不要（`exporting`/`tmg1Encoding`/`rendering` は既存）。
+  - **GUI 実操作での見た目（ステップ→パルスの動き）は未確認**。
+
+- **エクスポート結果レポートのモーダル表示**（2026-07-05、実装・`cargo test`/`tsc` 通過／コミット済み `800f2dc`）。
+  - 方針（ユーザー選択）: (1) 完了時に**専用モーダル**ポップアップ、(2) **全体サマリのみ**（区間内訳なし）、
+    (3) **サイドカー出力なし**（画面表示のみ）。
+  - 圧縮率は `tmg1` CLI が出さないため Studio 側で算出。backend `export()` が集計済みの未圧縮 raw 総バイトと
+    tmg1 出力ファイルサイズ（`fs::metadata`）から算出する。
+  - 変更: `ffmpeg.rs`（`ExportResult` に `raw_bytes: u64` / `tmg1_bytes: Option<u64>` 追加。tmg1 化成功後に
+    metadata 取得）、`main.ts`（`showExportReport`/`formatBytes`/`buildEncodeSummary`/`addReportRow`、
+    完了時に呼出）、`index.html`（`#report-modal` + `dl.report-list`）、`styles.css`（`.report-list` グリッド、
+    値は等幅・path は改行維持折返し）、locales 3言語に `report*` キー12種追加。
+  - 表示項目: 解像度/fps/フレーム数/尺/区間数/形式/RAW サイズ/TMG1 サイズ/圧縮率(%と N:1)/平均B/frame/
+    エンコード設定/出力パス。**RAW のみエクスポート時は圧縮系の行を隠す**。閉じる/オーバーレイ/Esc で閉じる。
+  - **GUI 実操作での表示・実ファイルサイズ一致目視は未確認**。
+
+## 過去にやったこと
 - **プレビューmp4を任意出力化**（2026-07-05、実装・検証済み／コミット済み `491cd85`）。
   - 背景: 従来はエクスポート形式に関わらず常に `.preview.mp4` を生成していた。ユーザー判断で
     「必要なときだけ出す」方針に変更（既定オフ）。既定では `.tmg1`/`.raw` のみ出力。
@@ -91,7 +123,7 @@
   - `6cb5968` Claude Code 用プロジェクト設定（CLAUDE.md + .claude/）追加。
 
 ## 一時的な制約・注意事項
-- **リモート未設定**。ローカルコミットのみ（GitHub へ未 push）。
+- リモート = `tmg1-labs/tmg1-studio`（push 済み）。CI は未整備。
 - CI 未整備。テストは手元で `cargo test`（filter.rs のユニットテスト）。
 - ffmpeg/ffprobe は PATH 前提。実行環境に無いと probe/preview/export が失敗する。
 - `tauri dev` 実行中は exe ロックで `cargo build` が「アクセス拒否」になる → 検証は `cargo check`。
@@ -99,7 +131,7 @@
 ## 次にやること
 - タグ駆動の自動ビルド/リリース CI（GitHub Actions）。その際 `VITE_APP_VERSION` にタグを渡し、
   installer 用に tauri.conf.json / Cargo.toml の version もタグへ同期する構成にする。
-- GitHub リモート作成 + 初回 push。
+- レポート／進捗バーの **GUI 実操作確認**（レポート表示・実ファイルサイズ一致、バーのステップ→パルス）。
 - 未検討: 「名前を付けて保存」（別名保存）。
 - **見送り**: 組み込みプリセット名の翻訳（2026-07-05 ユーザー判断で不要）。現状の非翻訳・英語名固定の
   ままとする（永続データとの不整合を避けるため、内部キー＋表示名翻訳への移行はしない）。
