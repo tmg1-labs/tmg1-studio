@@ -44,7 +44,7 @@ tmg1-studio/
 
 - **Preview is what the device shows**: the preview renders the 1-bit `monob` itself. TMG1
   encoding is lossless, so the monochrome you see on screen is pixel-for-pixel what the
-  on-device OLED displays (no encode-and-decode round-trip needed to check it).
+  on-device OLED displays.
 - **External tools**: uses the system `ffmpeg` / `ffprobe` (and `tmg1` for `tmg1` export) —
   none are bundled. Each executable is found on `PATH` by default, or you can point to a
   specific path in the app settings.
