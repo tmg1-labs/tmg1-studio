@@ -10,9 +10,9 @@ layered on top.
 A single uniform monochrome setting either loses detail or adds noise, so TMG1
 Studio lets you split the timeline into segments and tune contrast / level-squeeze /
 dithering independently for each, previewing the exact 1-bit `monob` result as you
-go. That raw is then encoded to [TMG1](https://github.com/tmg1-labs) and played
-back on an ESP32-driven OLED; TMG1 Studio can also invoke the `tmg1` CLI to emit
-a ready-to-play `.tmg1` directly.
+go. That raw can then be encoded to [TMG1](https://github.com/tmg1-labs) and played
+back on an ESP32-driven OLED — and TMG1 Studio can run that `tmg1` encode for you,
+emitting a `.tmg1` directly.
 
 ## Features
 
@@ -24,8 +24,8 @@ a ready-to-play `.tmg1` directly.
     high threshold (removes stray white dots in dark areas / dropouts in the foreground).
   - **Dither** — Bayer / error-diffusion / none (`-sws_dither`).
 - Export splits each segment, transcodes with its own settings, and concatenates the raw
-  losslessly. Choose the output format — `raw`, `tmg1`, or both — and the app invokes the
-  `tmg1` CLI itself to produce a ready-to-play `.tmg1` (no separate encode step). A
+  losslessly. Choose the output format — `raw`, `tmg1`, or both — and for `tmg1` the app
+  invokes the `tmg1` CLI itself to encode that raw into `.tmg1` (no separate encode step). A
   nearest-neighbour upscaled `.preview.mp4` for eyeballing is an optional extra (off by default).
 
 The **same filter-chain builder** (`src-tauri/src/filter.rs`) is used for both preview and
@@ -69,28 +69,24 @@ Backend unit tests (filter-chain builder):
 cd src-tauri && cargo test
 ```
 
-## Releases
-
-Pushing a `v*` tag (e.g. `v0.2.0`) triggers `.github/workflows/release.yml`, which builds
-installers on native runners for Windows (x64), macOS (Apple Silicon), and Linux (x64) and
-attaches them to a **draft** GitHub Release. The tag's version is synced into `package.json`,
-`tauri.conf.json`, and `Cargo.toml` at build time (`scripts/sync-version.mjs`), and passed to
-the app as the displayed version via `VITE_APP_VERSION`. Review the draft, then publish it.
-
-> Installers are **not code-signed**, so macOS Gatekeeper and Windows SmartScreen will warn on
-> first launch (right-click → Open on macOS; "More info → Run anyway" on Windows).
-
-Push/PR checks (`tsc` + `cargo test` + `clippy`) run separately in `.github/workflows/ci.yml`.
+Push/PR checks (`tsc` + `cargo test` + `clippy`) run in `.github/workflows/ci.yml`.
 
 ## Export output
 
-Depending on the chosen format:
+Export renders every segment with its own settings and concatenates them into one
+monochrome result for the whole timeline. You pick the primary output format:
 
-- `<name>.tmg1` — ready-to-play stream, encoded by invoking the `tmg1` CLI (format `tmg1` or `both`).
-- `<name>.raw` — packed `monob` frames, for feeding to `tmg1-cli encode` yourself (format `raw` or `both`).
-- `<name>.preview.mp4` — 6× nearest-neighbour upscale for visual confirmation (optional, off by default).
+- **`raw`** — writes `<name>.raw`: packed 1-bit `monob` frames. Encode them to TMG1
+  whenever you like with `tmg1-cli encode`.
+- **`tmg1`** — writes `<name>.tmg1`: that raw encoded to the TMG1 format. Studio runs
+  the `tmg1` CLI for you, so there is no separate encode step.
+- **`both`** — writes both of the above.
 
-> Width must be a multiple of 8 (monob byte boundary).
+You can optionally also write `<name>.preview.mp4` — a 6× nearest-neighbour upscale
+for eyeballing the result on a normal display (off by default).
+
+> [!IMPORTANT]
+> The frame width must be a multiple of 8 (the `monob` byte boundary).
 
 ## Related projects
 
