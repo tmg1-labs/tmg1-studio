@@ -1,10 +1,28 @@
 # 現在の作業コンテキスト
 
-最終更新: 2026-07-05（外部実行ファイル（ffmpeg/ffprobe/tmg1）のパスを設定で指定可能に。GUI 実操作確認済み・コミット直前）
+最終更新: 2026-07-05（タグ駆動の自動ビルド/リリース CI を実装・実走 green 確認済み・push 済み）
 
 ## 今やっていること
+- **タグ駆動の自動ビルド/リリース CI（GitHub Actions）を実装**（2026-07-05、commit `0ebb651`、
+  **push 済み・テストタグ実走で 3 マトリクス green 確認済み**）。
+  - 方針（ユーザー選択）: トリガー=`v*` タグ push / 対象=Windows(x64)・macOS(Apple Silicon)・
+    Linux(x64) の 3 ネイティブランナー / 実装=公式 `tauri-apps/tauri-action` / 公開=**ドラフト** /
+    テストゲートなし（ビルド専念。テストは push/PR の ci.yml が担保）。
+  - 追加ファイル: `.github/workflows/release.yml`（`permissions: contents: write`、`fail-fast:false`
+    マトリクス。Linux のみ apt で Tauri system-deps 導入、`setup-node@v5`、`rust-cache`、`npm ci`、
+    version 同期、`tauri-action@v0` で同一 tagName のドラフト Release を各脚が共有して添付）、
+    `scripts/sync-version.mjs`（タグの `v` 除去 semver を package.json/tauri.conf.json/Cargo.toml へ
+    同期＋同値を `VITE_APP_VERSION` で表示版へ）。README 英日に「Releases」節追加。
+  - **検証**: テストタグ `v0.0.99` を push → 3 ジョブ green（ubuntu-22.04/windows-latest/macos-latest）、
+    ドラフト Release に 7 バンドル（.msi/_x64-setup.exe/.dmg/.app.tar.gz/.AppImage/.deb/.rpm）が
+    version `0.0.99` 同期で添付されることを確認。**確認後テストタグとドラフトは削除済み**（リモート/ローカル
+    ともクリーン）。annotation は macos-latest の将来予告(macOS 26 移行)1件のみで、ユーザー判断で据え置き。
+  - **本番リリース手順**: `git tag vX.Y.Z && git push origin vX.Y.Z` → ドラフトを確認して手動公開。
+  - **未署名**: コード署名なし。macOS Gatekeeper / Windows SmartScreen 警告あり（README 注記済み）。
+
 - **外部実行ファイル（ffmpeg / ffprobe / tmg1）の実行パスを設定で指定可能に**（2026-07-05、
-  実装・`cargo test`/`clippy`/`npm run build` 通過・**GUI 実操作確認済み**）。
+  実装・`cargo test`/`clippy`/`npm run build` 通過・**GUI 実操作確認済み**。commit `3cb9cf4`、
+  **本セッションで push 済み**）。
   - 背景: 従来は 3 バイナリとも PATH 前提で、PATH に無いと probe/preview/export が失敗していた
     （known-issues の「ffmpeg/ffprobe が PATH に無い」「tmg1 が PATH に必要」）。設定で明示指定できるようにした。
   - 方針（ユーザー選択）: 配線は **Rust 側で `settings.json`（tauri-plugin-store、言語設定と共用）を直読み**。
@@ -171,8 +189,8 @@
   ままとする（永続データとの不整合を避けるため、内部キー＋表示名翻訳への移行はしない）。
 
 ## 次にやること
-- タグ駆動の自動ビルド/リリース CI（GitHub Actions）。その際 `VITE_APP_VERSION` にタグを渡し、
-  installer 用に tauri.conf.json / Cargo.toml の version もタグへ同期する構成にする。
+- タグ駆動リリース CI は**実装・実走 green 済み**（上記「今やっていること」参照）。次は本番タグを切って
+  初回リリースを公開する（例 `v0.2.0`。codec/cli と揃える場合）。必要ならリリースノートの整備。
 - 未検討: 「名前を付けて保存」（別名保存）。
 
 ## 参考

@@ -132,6 +132,31 @@
   `runs.using` を実確認**（`gh api repos/actions/setup-node/contents/action.yml?ref=v5 --jq .content | base64 -d | grep -A2 runs:`）。
   setup-node は v5 で node24（v6 も存在するが v5 で解消）。
 
+### リリース CI: Org の Workflow permissions が read-only だと Release 作成が 403（グレーアウトの正体）
+- **症状**: リポジトリの Settings → Actions → 「Workflow permissions」で **Read and write がグレーアウト**して
+  選べない。read-only のままだと `tauri-action`（や `gh release create`）の Release 作成が
+  403「Resource not accessible by integration」で落ちうる。
+- **原因**: `tmg1-labs` は **Organization** で、Org の Actions 設定が配下リポジトリを enforce するとリポジトリ側が
+  グレーアウト（変更不可）になる。
+- **回避策**: Org オーナーが `https://github.com/organizations/tmg1-labs/settings/actions` の
+  「Workflow permissions」を Read and write にする（実施済み 2026-07-05）。加えてワークフロー先頭の
+  `permissions: contents: write` は Org が read/write 昇格を許可する範囲でジョブ単位に効く（release.yml は宣言済み）。
+
+### リリース CI: テストタグは数値のみの semver にする（MSI/WiX が接尾辞を受け付けない）
+- **症状/懸念**: `v0.0.0-test` のようにプレリリース接尾辞付きタグを使うと、Windows の MSI(WiX) が
+  version を数値 `x.y.z` しか受け付けず、ワークフロー本体と無関係にビルドが落ちうる。
+- **回避策**: 実走テストは**数値のみの使い捨てタグ**（今回 `v0.0.99`。実リリースと衝突しない値）を使う。
+  `sync-version.mjs` は `^\d+\.\d+\.\d+` を通すため接尾辞自体は素通しする＝ガードにならない点に注意。
+  検証後は `gh release delete <tag> --cleanup-tag --yes`（Release＋リモートタグを一括削除）＋ローカル `git tag -d`。
+
+### リリース CI: tauri-action はマトリクス各脚が同一 tagName のドラフトを共有して添付
+- **メモ（設計）**: `release.yml` は 3 プラットフォームを 1 ジョブのマトリクスで回し、各脚が
+  `tauri-apps/tauri-action@v0` を同一 `tagName` で呼ぶ。tauri-action は既存の（ドラフト）Release を
+  再利用して自分のバンドルを add する冪等動作なので、3 脚が 1 つのドラフトに全 7 バンドルを集約する。
+  `releaseDraft: true` で完成後に手動公開。version 同期は各脚の `sync-version.mjs` 実行でタグ値に揃う。
+- **実績**: 初回（キャッシュ無し）で ubuntu-22.04 6m3s / windows-latest 6m56s / macos-latest 3m21s。
+  `targets: "all"` により Linux は .AppImage/.deb に加え **.rpm も生成**される。
+
 ## 地雷・禁止事項
 - プレビューとエクスポートでフィルタチェーン構築を分岐させない（WYSIWYG が崩れる。
   修正は `filter.rs` に一本化する）。
