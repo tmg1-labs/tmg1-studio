@@ -1,13 +1,18 @@
 # TMG1 Studio
 
-A cross-platform desktop GUI for converting video to 1-bit monochrome **per segment**,
-built for the [TMG1](https://github.com/tmg1-labs) pipeline (ESP32 OLED playback).
+**English** | [日本語](README.ja.md)
 
-A single uniform monochrome setting either loses detail or adds noise. TMG1 Studio lets
-you split the timeline into segments and tune contrast / level-squeeze / dithering
-independently for each, previewing the exact `monob` (1-bit) result as you go.
+A cross-platform desktop GUI for turning video into 1-bit monochrome (`monob`)
+footage, tuned **per segment** of the timeline. Despite the name, its main job is
+authoring the packed `monob` raw file — direct `.tmg1` export is a convenience
+layered on top.
 
-日本語版は [README.ja.md](README.ja.md) を参照。
+A single uniform monochrome setting either loses detail or adds noise, so TMG1
+Studio lets you split the timeline into segments and tune contrast / level-squeeze /
+dithering independently for each, previewing the exact 1-bit `monob` result as you
+go. The raw it produces feeds the [TMG1](https://github.com/tmg1-labs) pipeline
+(ultimately ESP32 OLED playback); it can also invoke the `tmg1` CLI to emit a
+ready-to-play `.tmg1` directly.
 
 ## Features
 
