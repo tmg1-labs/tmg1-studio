@@ -10,9 +10,9 @@ layered on top.
 A single uniform monochrome setting either loses detail or adds noise, so TMG1
 Studio lets you split the timeline into segments and tune contrast / level-squeeze /
 dithering independently for each, previewing the exact 1-bit `monob` result as you
-go. The raw it produces feeds the [TMG1](https://github.com/tmg1-labs) pipeline
-(ultimately ESP32 OLED playback); it can also invoke the `tmg1` CLI to emit a
-ready-to-play `.tmg1` directly.
+go. That raw is then encoded to [TMG1](https://github.com/tmg1-labs) and played
+back on an ESP32-driven OLED; TMG1 Studio can also invoke the `tmg1` CLI to emit
+a ready-to-play `.tmg1` directly.
 
 ## Features
 
