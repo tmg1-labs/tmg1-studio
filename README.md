@@ -86,6 +86,11 @@ Depending on the chosen format:
 
 > Width must be a multiple of 8 (monob byte boundary).
 
+## Related projects
+
+Part of **[TMG1 Labs](https://github.com/tmg1-labs)** — see the organization
+profile for all repositories in the project.
+
 ## License
 
 MIT

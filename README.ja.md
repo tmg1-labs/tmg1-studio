@@ -83,6 +83,11 @@ push/PR のチェック（`tsc` + `cargo test` + `clippy`）は `.github/workflo
 
 > 幅は 8 の倍数にしてください（monob のバイト境界）。
 
+## 関連プロジェクト
+
+**[TMG1 Labs](https://github.com/tmg1-labs)** の一部です。プロジェクトの全リポジトリ
+一覧は組織プロフィールを参照してください。
+
 ## ライセンス
 
 MIT
