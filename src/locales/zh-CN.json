@@ -123,5 +123,18 @@
   "encodePresetTitle": "编码预设",
   "encPresetApplied": "已应用编码预设“{name}”",
   "encPresetSaved": "已保存编码预设“{name}”",
-  "encPresetDeleted": "已删除编码预设“{name}”"
+  "encPresetDeleted": "已删除编码预设“{name}”",
+
+  "reportTitle": "导出报告",
+  "reportResolution": "分辨率",
+  "reportFrames": "帧数",
+  "reportDuration": "时长",
+  "reportSegments": "区间数",
+  "reportFormat": "格式",
+  "reportRawSize": "RAW 大小",
+  "reportTmg1Size": "TMG1 大小",
+  "reportRatio": "压缩率",
+  "reportAvgPerFrame": "平均/帧",
+  "reportEncodeSettings": "编码设置",
+  "reportOutput": "输出"
 }

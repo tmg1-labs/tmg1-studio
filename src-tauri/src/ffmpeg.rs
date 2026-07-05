@@ -132,6 +132,10 @@ pub struct ExportResult {
     pub mp4_path: Option<String>,
     /// 総フレーム数。
     pub frames: u64,
+    /// 未圧縮 monob（連結 raw）の総バイト数。レポートの圧縮率分母に使う。
+    pub raw_bytes: u64,
+    /// tmg1 出力ファイルのバイト数（Tmg1/Both のときのみ）。圧縮率分子に使う。
+    pub tmg1_bytes: Option<u64>,
 }
 
 #[derive(Clone, Serialize)]
@@ -557,10 +561,14 @@ pub fn export(
     };
 
     // tmg1 化（形式に含まれるときのみ）。連結済み raw を PATH の tmg1 CLI に委ねる。
-    if format.wants_tmg1() {
+    // 成功後に出力ファイルサイズを取得し、レポートの圧縮率算出に使う。
+    let tmg1_bytes = if format.wants_tmg1() {
         let _ = app.emit("tmg1-encoding", ());
         encode_tmg1(&raw_write_path, p.width, p.height, p.fps, &p.encode, &tmg1_out)?;
-    }
+        std::fs::metadata(&tmg1_out).map(|m| m.len()).ok()
+    } else {
+        None
+    };
 
     // tmg1 のみのときは一時 raw を掃除する。
     if !format.wants_raw() {
@@ -578,6 +586,8 @@ pub fn export(
         tmg1_path: format.wants_tmg1().then(|| tmg1_out.to_string_lossy().into_owned()),
         mp4_path,
         frames,
+        raw_bytes: total_bytes,
+        tmg1_bytes,
     })
 }
 

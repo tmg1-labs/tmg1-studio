@@ -123,5 +123,18 @@
   "encodePresetTitle": "エンコードプリセット",
   "encPresetApplied": "エンコードプリセット「{name}」を適用",
   "encPresetSaved": "エンコードプリセット「{name}」を保存",
-  "encPresetDeleted": "エンコードプリセット「{name}」を削除"
+  "encPresetDeleted": "エンコードプリセット「{name}」を削除",
+
+  "reportTitle": "エクスポート結果",
+  "reportResolution": "解像度",
+  "reportFrames": "フレーム数",
+  "reportDuration": "尺",
+  "reportSegments": "区間数",
+  "reportFormat": "形式",
+  "reportRawSize": "RAW サイズ",
+  "reportTmg1Size": "TMG1 サイズ",
+  "reportRatio": "圧縮率",
+  "reportAvgPerFrame": "平均/フレーム",
+  "reportEncodeSettings": "エンコード設定",
+  "reportOutput": "出力"
 }

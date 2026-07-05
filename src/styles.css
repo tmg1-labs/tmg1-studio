@@ -662,6 +662,30 @@ button:disabled {
   flex-wrap: wrap;
 }
 
+/* ---- エクスポート結果レポート ---- */
+.report-list {
+  margin: 0 0 1.1rem;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.35rem 1rem;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.report-list dt {
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.report-list dd {
+  margin: 0;
+  color: var(--fg);
+  font-variant-numeric: tabular-nums;
+  /* 出力パスは複数行になりうるので改行を維持しつつ折り返す。 */
+  white-space: pre-line;
+  word-break: break-all;
+}
+
 /* ---- エクスポート設定モーダル ---- */
 .modal.wide {
   max-width: 620px;

@@ -123,5 +123,18 @@
   "encodePresetTitle": "Encode presets",
   "encPresetApplied": "Applied encode preset \"{name}\"",
   "encPresetSaved": "Saved encode preset \"{name}\"",
-  "encPresetDeleted": "Deleted encode preset \"{name}\""
+  "encPresetDeleted": "Deleted encode preset \"{name}\"",
+
+  "reportTitle": "Export report",
+  "reportResolution": "Resolution",
+  "reportFrames": "Frames",
+  "reportDuration": "Duration",
+  "reportSegments": "Segments",
+  "reportFormat": "Format",
+  "reportRawSize": "RAW size",
+  "reportTmg1Size": "TMG1 size",
+  "reportRatio": "Compression",
+  "reportAvgPerFrame": "Avg / frame",
+  "reportEncodeSettings": "Encode settings",
+  "reportOutput": "Output"
 }

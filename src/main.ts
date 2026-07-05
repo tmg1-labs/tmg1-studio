@@ -40,6 +40,8 @@ interface ExportResult {
   tmg1_path?: string | null;
   mp4_path?: string | null;
   frames: number;
+  raw_bytes: number; // 未圧縮 monob 総バイト（圧縮率の分母）
+  tmg1_bytes?: number | null; // tmg1 出力サイズ（tmg1/both のときのみ）
 }
 
 // 保存する編集プロジェクトの形（.tmgproj = JSON）。
@@ -238,6 +240,20 @@ function fmtTime(sec: number): string {
 function setStatus(msg: string, isError = false) {
   statusEl.textContent = msg;
   statusEl.classList.toggle("error", isError);
+}
+
+// バイト数を「1,228,800 B (1.17 MB)」のように整形する。
+function formatBytes(n: number): string {
+  const raw = `${n.toLocaleString()} B`;
+  if (n < 1024) return raw;
+  const units = ["KB", "MB", "GB"];
+  let v = n;
+  let u = -1;
+  do {
+    v /= 1024;
+    u++;
+  } while (v >= 1024 && u < units.length - 1);
+  return `${raw} (${v.toFixed(2)} ${units[u]})`;
 }
 
 /** playhead を含む区間の index（境界は右側の区間に属する）。 */
@@ -1283,6 +1299,100 @@ document.addEventListener("keydown", (e) => {
   if (!exportModal.hidden && e.key === "Escape") resolveExportModal(false);
 });
 
+// ---- エクスポート結果レポート ----
+const reportModal = $("report-modal");
+const reportBody = $("report-body");
+const reportCloseBtn = $("report-close") as HTMLButtonElement;
+
+// エンコード設定を1行の要約文字列にする（tmg1/both のときのみ表示）。
+function buildEncodeSummary(e: Tmg1Encode): string {
+  const flags: string[] = [];
+  if (e.scd) flags.push("scd");
+  if (e.vfr) flags.push("vfr");
+  if (e.prediction) flags.push("prediction");
+  if (e.delta) flags.push("delta");
+  if (e.index) flags.push("index");
+  const rice =
+    e.coder === "rice"
+      ? e.rice_mode === "fixed"
+        ? `rice/${e.rice_mode} k=${e.rice_k}`
+        : `rice/${e.rice_mode}`
+      : "range";
+  return `${rice}  key-int=${e.key_int}  [${flags.join(", ")}]`;
+}
+
+interface ReportMeta {
+  w: number;
+  h: number;
+  fps: number;
+  format: ExportFormat;
+  segCount: number;
+  encode: Tmg1Encode;
+}
+
+// レポートモーダルに 1 行（dt=ラベル / dd=値）を追加する。
+function addReportRow(label: string, value: string) {
+  const dt = document.createElement("dt");
+  dt.textContent = label;
+  const dd = document.createElement("dd");
+  dd.textContent = value;
+  reportBody.append(dt, dd);
+}
+
+// エクスポート結果を集計してレポートモーダルを開く。
+function showExportReport(result: ExportResult, meta: ReportMeta) {
+  reportBody.replaceChildren();
+
+  const dur = meta.fps > 0 ? result.frames / meta.fps : 0;
+  addReportRow(t("reportResolution"), `${meta.w}×${meta.h}  ${meta.fps} fps`);
+  addReportRow(t("reportFrames"), result.frames.toLocaleString());
+  addReportRow(t("reportDuration"), fmtTime(dur));
+  addReportRow(t("reportSegments"), String(meta.segCount));
+  addReportRow(t("reportFormat"), meta.format.toUpperCase());
+  addReportRow(t("reportRawSize"), formatBytes(result.raw_bytes));
+
+  const tmg1 = result.tmg1_bytes ?? null;
+  if (tmg1 != null) {
+    addReportRow(t("reportTmg1Size"), formatBytes(tmg1));
+    if (result.raw_bytes > 0 && tmg1 > 0) {
+      const pct = ((tmg1 / result.raw_bytes) * 100).toFixed(1);
+      const ratio = (result.raw_bytes / tmg1).toFixed(1);
+      addReportRow(t("reportRatio"), `${pct}%  (${ratio}:1)`);
+    }
+    addReportRow(t("reportEncodeSettings"), buildEncodeSummary(meta.encode));
+  }
+
+  // 平均バイト/フレーム（tmg1 があれば tmg1 基準、無ければ raw 基準）。
+  const basis = tmg1 ?? result.raw_bytes;
+  if (result.frames > 0) {
+    addReportRow(
+      t("reportAvgPerFrame"),
+      `${Math.round(basis / result.frames).toLocaleString()} B`,
+    );
+  }
+
+  // 出力パス（存在するものだけ）。
+  const outs: string[] = [];
+  if (result.tmg1_path) outs.push(result.tmg1_path);
+  if (result.raw_path) outs.push(result.raw_path);
+  if (result.mp4_path) outs.push(result.mp4_path);
+  if (outs.length > 0) addReportRow(t("reportOutput"), outs.join("\n"));
+
+  reportModal.hidden = false;
+}
+
+function closeReportModal() {
+  reportModal.hidden = true;
+}
+
+reportCloseBtn.addEventListener("click", closeReportModal);
+reportModal.addEventListener("click", (e) => {
+  if (e.target === reportModal) closeReportModal();
+});
+document.addEventListener("keydown", (e) => {
+  if (!reportModal.hidden && e.key === "Escape") closeReportModal();
+});
+
 async function doExport() {
   if (!state.inputPath || state.exporting) return;
   const w = Number(outW.value);
@@ -1349,6 +1459,15 @@ async function doExport() {
     } else {
       setStatus(t("exportDoneNoPreview", { frames: result.frames, out }));
     }
+    // 詳細な統計はレポートモーダルに表示する。
+    showExportReport(result, {
+      w,
+      h,
+      fps,
+      format,
+      segCount: state.segments.length,
+      encode: state.encode,
+    });
   } catch (e) {
     setStatus(String(e), true);
   } finally {
