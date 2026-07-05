@@ -185,6 +185,8 @@ const previewMeta = $("preview-meta");
 const renderProgress = $("render-progress");
 const renderProgressFill = $("render-progress-fill");
 const renderProgressPct = $("render-progress-pct");
+const renderProgressLabel = $("render-progress-label");
+const renderProgressTrack = $("render-progress-track");
 const zoomEl = $("zoom") as HTMLSelectElement;
 const playBtn = $("play-btn") as HTMLButtonElement;
 const rangeToSegBtn = $("range-to-seg") as HTMLButtonElement;
@@ -996,17 +998,28 @@ function revokeUrl() {
   }
 }
 
-// 再生用レンダリングの進捗バー。
+// 進捗バー（再生レンダリングとエクスポートで共用）。
 function setRenderProgress(pct: number) {
+  // パーセント表示に戻す（不定表示を解除）。
+  renderProgressTrack.classList.remove("indeterminate");
   const p = Math.max(0, Math.min(100, Math.round(pct)));
   renderProgressFill.style.width = `${p}%`;
   renderProgressPct.textContent = `${p}%`;
 }
-function showRenderProgress() {
+// フレーム進捗を出せない工程用の不定（パルス）表示。ラベルを添えて呼ぶ。
+function setRenderProgressIndeterminate(labelKey: string) {
+  renderProgressLabel.textContent = t(labelKey);
+  renderProgressTrack.classList.add("indeterminate");
+  renderProgressPct.textContent = "";
+}
+// labelKey で見出しを差し替え（既定は再生用レンダリング）。
+function showRenderProgress(labelKey = "rendering") {
+  renderProgressLabel.textContent = t(labelKey);
   setRenderProgress(0);
   renderProgress.hidden = false;
 }
 function hideRenderProgress() {
+  renderProgressTrack.classList.remove("indeterminate");
   renderProgress.hidden = true;
 }
 
@@ -1436,6 +1449,8 @@ async function doExport() {
   state.exporting = true;
   exportBtn.disabled = true;
   setStatus(t("exporting"));
+  // 進捗バーを「エクスポート中」ラベルで表示（区間ごとに 0–100% を刻む）。
+  showRenderProgress("exporting");
 
   try {
     const project = {
@@ -1471,19 +1486,23 @@ async function doExport() {
   } catch (e) {
     setStatus(String(e), true);
   } finally {
+    hideRenderProgress();
     state.exporting = false;
     exportBtn.disabled = false;
   }
 }
 
-// tmg1 エンコード開始イベント（CLI 実行中）。
+// tmg1 エンコード開始イベント（CLI 実行中）。フレーム進捗が無いため不定表示に切り替える。
 listen("tmg1-encoding", () => {
   setStatus(t("tmg1Encoding"));
+  setRenderProgressIndeterminate("tmg1Encoding");
 });
 
-// エクスポート進捗イベント。
+// エクスポート進捗イベント。区間 done/total を 0–100% のバーに反映する。
 listen<{ done: number; total: number }>("export-progress", (ev) => {
-  setStatus(t("exportProgress", { done: ev.payload.done, total: ev.payload.total }));
+  const { done, total } = ev.payload;
+  setStatus(t("exportProgress", { done, total }));
+  if (total > 0) setRenderProgress((done / total) * 100);
 });
 
 // ---- プリセット（tauri-plugin-store で永続化）----
