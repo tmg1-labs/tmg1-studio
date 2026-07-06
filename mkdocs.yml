@@ -1,0 +1,61 @@
+site_name: TMG1 Studio
+site_url: https://tmg1-labs.github.io/tmg1-studio/
+site_description: Manual for TMG1 Studio — per-segment 1-bit monochrome video authoring
+repo_url: https://github.com/tmg1-labs/tmg1-studio
+repo_name: tmg1-labs/tmg1-studio
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: black
+      toggle:
+        icon: material/weather-night
+        name: Dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: black
+      toggle:
+        icon: material/weather-sunny
+        name: Light mode
+  features:
+    - navigation.footer
+    - navigation.sections
+    - content.code.copy
+
+nav:
+  - Overview: index.md
+  - Getting Started: getting-started.md
+  - Interface: interface.md
+  - Editing: editing.md
+  - Export: export.md
+
+plugins:
+  - search
+  - i18n:
+      docs_structure: folder
+      languages:
+        - locale: en
+          default: true
+          name: English
+          build: true
+        - locale: ja
+          name: 日本語
+          build: true
+          nav_translations:
+            Overview: 概要
+            Getting Started: はじめに
+            Interface: 画面構成
+            Editing: 編集
+            Export: エクスポート
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - pymdownx.details
+  - pymdownx.superfences
+  - toc:
+      permalink: true
