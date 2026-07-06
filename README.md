@@ -2,6 +2,8 @@
 
 **English** | [日本語](README.ja.md)
 
+📖 **[Manual](https://tmg1-labs.github.io/tmg1-studio/)** — full documentation with screenshots.
+
 ![TMG1 Studio screenshot](docs/screenshot.webp)
 
 A cross-platform desktop GUI for turning video into 1-bit monochrome (`monob`)

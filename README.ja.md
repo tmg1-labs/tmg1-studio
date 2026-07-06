@@ -2,6 +2,8 @@
 
 [English](README.md) | **日本語**
 
+📖 **[マニュアル](https://tmg1-labs.github.io/tmg1-studio/ja/)** — スクリーンショット付きの詳しい使い方はこちら。
+
 ![TMG1 Studio のスクリーンショット](docs/screenshot.webp)
 
 動画を**区間ごとに**1bit モノクロ（`monob`）化する、クロスプラットフォームな
