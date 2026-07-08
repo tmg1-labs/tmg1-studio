@@ -80,6 +80,14 @@ jobs:
         with:
           tagName: ${{ github.ref_name }}
           releaseName: 'TMG1 Studio ${{ github.ref_name }}'
+          releaseBody: |
+            ### ⚠️ Upgrading from v0.1.0 / v0.1.0 からのアップグレード
+
+            The app's display name changed from `tmg1-studio` to **TMG1 Studio**, so Windows treats it as a separate application and will not upgrade the old one in place. **Please uninstall the old "tmg1-studio" first** (Settings → Apps, or Programs and Features) before installing this version. Your settings are preserved (stored under the unchanged app identifier).
+
+            アプリの表示名が `tmg1-studio` から **TMG1 Studio** に変わったため、Windows では別アプリ扱いになり、旧版は上書き更新されません。本バージョンを入れる前に、**旧「tmg1-studio」を先にアンインストールしてください**（設定 → アプリ、または「プログラムと機能」）。設定は保持されます（アプリ識別子は変更していないため）。
+
+            ---
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}
