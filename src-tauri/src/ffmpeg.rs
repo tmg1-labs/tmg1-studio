@@ -12,6 +12,22 @@ use tauri_plugin_store::StoreExt;
 
 use crate::filter::{build_chain, Chain, Segment};
 
+/// 子プロセス生成用の Command を作る。
+/// Windows では CREATE_NO_WINDOW を付与し、操作のたびにコンソール窓が
+/// 一瞬表示されて消える現象を防ぐ。他プラットフォームでは通常の Command::new と同じ。
+#[allow(unused_mut)]
+fn command<S: AsRef<std::ffi::OsStr>>(program: S) -> Command {
+    let mut cmd = Command::new(program);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        // winbase.h の CREATE_NO_WINDOW。子プロセスにコンソールを割り当てない。
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+    cmd
+}
+
 /// 外部実行ファイル（ffmpeg / ffprobe / tmg1）のパス。
 /// 設定で明示指定があればそれを、無ければ PATH 上のコマンド名を使う。
 /// フロントが `settings.json`（tauri-plugin-store）へ書いた値を Rust 側で直読みする。
@@ -211,7 +227,7 @@ fn parse_rational(s: &str) -> f64 {
 
 /// ffprobe で入力動画のサイズ・fps・尺を取得する。
 pub fn probe(exe: &ExePaths, path: &str) -> Result<VideoInfo, String> {
-    let out = Command::new(&exe.ffprobe)
+    let out = command(&exe.ffprobe)
         .args([
             "-v",
             "error",
@@ -263,7 +279,7 @@ pub fn render_preview(
     height: u32,
 ) -> Result<Vec<u8>, String> {
     let chain = build_chain(seg, width, height);
-    let out = Command::new(&exe.ffmpeg)
+    let out = command(&exe.ffmpeg)
         .args([
             "-hide_banner",
             "-loglevel",
@@ -319,7 +335,7 @@ fn slice_to_raw(
     fps: f64,
     out: &std::path::Path,
 ) -> Result<(), String> {
-    let status = Command::new(&exe.ffmpeg)
+    let status = command(&exe.ffmpeg)
         .args([
             "-hide_banner",
             "-loglevel",
@@ -369,7 +385,7 @@ fn slice_to_raw_progress(
     total_frames: u64,
     last_pct: &mut i32,
 ) -> Result<(), String> {
-    let mut child = Command::new(&exe.ffmpeg)
+    let mut child = command(&exe.ffmpeg)
         .args([
             "-hide_banner",
             "-loglevel",
@@ -456,7 +472,7 @@ fn encode_tmg1(
     // bool フラグは CLI 側が値付き（--flag true/false）を要求する。
     let b = |v: bool| if v { "true" } else { "false" };
 
-    let mut cmd = Command::new(&exe.tmg1);
+    let mut cmd = command(&exe.tmg1);
     cmd.args(["encode", "--size", &size, "--fps", &fps]);
     cmd.args(["--coder", &enc.coder]);
     cmd.args(["--key-int", &key_int]);
@@ -571,7 +587,7 @@ pub fn export(
     let mp4_path = if preview {
         let mp4_path = preview_mp4_path(&raw_out);
         let size = format!("{}x{}", p.width, p.height);
-        let mp4_status = Command::new(&exe.ffmpeg)
+        let mp4_status = command(&exe.ffmpeg)
             .args([
                 "-hide_banner",
                 "-loglevel",
@@ -740,7 +756,7 @@ pub fn render_range(
     let mp4 = tmp.join("range.mp4");
     let size = format!("{}x{}", p.width, p.height);
     let vf = format!("scale={vw}:{vh}:flags=neighbor");
-    let status = Command::new(&exe.ffmpeg)
+    let status = command(&exe.ffmpeg)
         .args([
             "-hide_banner",
             "-loglevel",
