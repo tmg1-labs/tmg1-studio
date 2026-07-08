@@ -1,8 +1,60 @@
 # 現在の作業コンテキスト
 
-最終更新: 2026-07-05（タグ駆動の自動ビルド/リリース CI を実装・実走 green 確認済み・push 済み）
+最終更新: 2026-07-08（Windowsのコンソール窓フラッシュ修正・コミット済み。push 未）
 
 ## 今やっていること
+- **Windows: 子プロセス起動時のコンソール窓フラッシュを修正**（2026-07-08、commit `3308f4f`、
+  **実機リリースビルドで確認済み・push 未**）。
+  - 症状: 配布版（インストール済み）アプリで、動画の probe/preview/export など**操作のたびに
+    コンソール窓が一瞬表示されて消える**。`tauri dev` では再現しなかった。
+  - 原因: `src-tauri/src/ffmpeg.rs` が ffmpeg/ffprobe/tmg1 を子プロセスとして呼ぶが、
+    **リリースビルドは `windows_subsystem = "windows"` でコンソールを持たない GUI アプリ**のため、
+    console 系の子プロセス起動ごとに自前のコンソール窓が作られてフラッシュする。dev は
+    `cargo run` 親のコンソールを子が継承するため新規窓が作られず再現しなかった。
+  - 対処: `ffmpeg.rs` に `command()` ヘルパーを追加し、`#[cfg(windows)]` で `CREATE_NO_WINDOW`
+    (`0x0800_0000`) を `creation_flags` に付与。全7箇所（ffmpeg×5/ffprobe×1/tmg1×1）の
+    `Command::new` を置換。引数・I/O・ロジックは不変（他OSは従来どおり）。
+  - 検証: `cargo check` exit 0。**リリースビルドの実機でフラッシュ消失をユーザー確認済み**
+    （2026-07-08）。dev では元々出ないため、確認は必ずリリースビルドで行う。
+  - 教訓は known-issues.md に追記。
+- **GitHub Pages マニュアルを公開**（2026-07-06、commit `b638df4`＋`a2f8cbd`、**push 済み・Actions green・
+  公開確認済み**）。https://tmg1-labs.github.io/tmg1-studio/ （英語）/ 同 `/ja/`（日本語）。
+  - 構成: **MkDocs Material + mkdocs-static-i18n**。`docs_structure: folder`（`docs/en/`・`docs/ja/` に
+    各 5 ページ index / getting-started / interface / editing / export ＋ `images/` 11 枚）。
+    `mkdocs.yml` はリポジトリルート。既存 `docs/screenshot.webp` は README 用にそのまま残置。
+  - **当初は suffix 構成（`index.ja.md` 方式）で作ったが、ja ページ内リンクを `.md`（英語版）に向ける
+    ミスが出たため folder 構成へ再編**（ユーザー提案）。folder なら同一フォルダ内の相対リンクで済み、
+    この種のミスが構造的に起きない（詳細は known-issues.md）。
+  - スクショは**アプリ実操作で撮影**（日英 UI 両方。言語を切り替えて同一状態を 2 セット）。実エクスポートも
+    実行し、進捗表示（43%）は 300ms 間隔の連写キャプチャから採取。ウィンドウ影余白は
+    DWM ExtendedFrameBounds との実測差分（左8/上0/右8/下8px）でトリム済み（詳細は known-issues.md）。
+  - デプロイ: `.github/workflows/docs.yml`（main push の `docs/**`/`mkdocs.yml` 変更で
+    `mkdocs build --strict` → actions/deploy-pages）。**Settings → Pages → Source=GitHub Actions 設定済み**
+    （ユーザー実施）。Actions green・公開はユーザー確認済み。
+  - README 英日の言語スイッチャ直下に 📖 マニュアルリンクを追加（en はサイトトップ、ja は `/ja/`）。
+  - 残作業なし。**撮影で作った一時ファイル `D:\tmp\freely-tomorrow\manual_demo{,2,3}.tmg1` は削除可**。
+  - 注: ローカル Windows に mkdocs は未導入（検証は Cowork セッション環境と CI の `--strict` で実施）。
+    ローカルプレビューは `pip install mkdocs-material mkdocs-static-i18n` → `mkdocs serve`。
+
+- **README（英日）を全面整理**（2026-07-06、**push 済み**。commit `cff9d24` ほか一連）。
+  - **主旨の是正**: 実態に合わせ「主目的は `monob` raw の作成支援。`.tmg1` 直接エクスポートは
+    その上に乗せたおまけ」という位置づけに改稿。「そのまま再生可能／TMG1 プレーヤー前提」の
+    言い回しを排除し、tmg1 出力は「raw を TMG1 形式にエンコードしたもの」と説明し直した
+    （ツール名が TMG1 でも本体はモノクロ化支援、という主旨をユーザーが重視）。
+  - **構成変更**: (1) 冒頭に実行イメージ `docs/screenshot.webp`（新規追加）を掲載。
+    (2)「アーキテクチャ」節を削除（ディレクトリツリー/「プレビューは実機と同じ絵」/「外部ツール」は
+    冗長・前提と重複のため）。(3)「前提」を**「ビルドに必要(Rust/Node/Tauri sysdeps)」**と
+    **「実行に必要(ffmpeg/ffprobe/tmg1)」**の2グループに分割。(4)「リリース」節を削除
+    （他リポジトリと同様、リリース手順は README に書かない方針。CI チェックの1行のみ開発節に残す）。
+    (5)「エクスポート出力」を特長の直下へ移動（機能→出力形式の流れ）。
+  - **書式統一**: 言語スイッチャを codec/cli と同じ冒頭1行形式（`**English** | [日本語]` /
+    `[English] | **日本語**`）へ。ja 見出し「機能」→「特長」。引用注記を GitHub アラート記法
+    `> [!IMPORTANT]` へ。README.ja は全文ですます調。「関連プロジェクト」節は個別列挙をやめ組織
+    プロフィールへの案内に統一（兄弟リポ一覧は組織トップに集約する方針）。
+  - あわせて **`tmg1-labs.github` の組織プロフィール Repositories 表に `tmg1-studio` 行を追加**
+    （TypeScript / Tauri、push 済み）。
+  - **注**: この間、ユーザーから「明示指示があるまで commit/push しない」と指摘あり（1回の
+    「pushして」を次の編集へ引き継いで勝手に push していた）。以後は指示があるまで push しない。
 - **タグ駆動の自動ビルド/リリース CI（GitHub Actions）を実装**（2026-07-05、commit `0ebb651`、
   **push 済み・テストタグ実走で 3 マトリクス green 確認済み**）。
   - 方針（ユーザー選択）: トリガー=`v*` タグ push / 対象=Windows(x64)・macOS(Apple Silicon)・
@@ -178,10 +230,13 @@
   - `6cb5968` Claude Code 用プロジェクト設定（CLAUDE.md + .claude/）追加。
 
 ## 一時的な制約・注意事項
-- リモート = `tmg1-labs/tmg1-studio`（push 済み）。CI は未整備。
-- CI 未整備。テストは手元で `cargo test`（filter.rs のユニットテスト）。
+- リモート = `tmg1-labs/tmg1-studio`（push 済み）。CI 整備済み（push/PR=`ci.yml`、`v*`タグ=`release.yml`）。
+- テストは `cargo test`（filter.rs のユニットテスト）。
 - ffmpeg/ffprobe/tmg1 は PATH 既定だが、**設定メニューの「実行ファイルのパス」で絶対パス指定も可能**
   （2026-07-05〜）。未設定なら従来どおり PATH を探し、無ければ probe/preview/export が失敗する。
+  - 設定の保存先（tauri-plugin-store）: Windows は `%APPDATA%\com.tmg1labs.studio\settings.json`
+    （実行パス `ffmpegPath`/`ffprobePath`/`tmg1Path` と `locale`）。他に `presets.json`/
+    `encode-presets.json`。**dev(`tauri dev`)と本番で identifier 同一のため設定は共有される**。
 - `tauri dev` 実行中は exe ロックで `cargo build` が「アクセス拒否」になる → 検証は `cargo check`。
 
 ## 決定事項（やらないと決めたこと）
