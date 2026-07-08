@@ -157,9 +157,45 @@
 - **実績**: 初回（キャッシュ無し）で ubuntu-22.04 6m3s / windows-latest 6m56s / macos-latest 3m21s。
   `targets: "all"` により Linux は .AppImage/.deb に加え **.rpm も生成**される。
 
+### mkdocs-static-i18n: suffix 構成は言語間リンクミスを誘発する（folder 構成が安全）
+- **症状**: 日本語ページ（`index.ja.md`）内のリンクを `getting-started.md` と書くと**英語ページに飛ぶ**。
+- **原因**: suffix 構成ではローカライズ版へのリンクは `getting-started.ja.md` と suffix 付きで書く必要がある。
+  書き忘れてもビルドは通る（英語版として有効なリンクのため `--strict` でも検出されない）。
+- **回避策**: **`docs_structure: folder`**（`docs/en/`・`docs/ja/`）にする。同一フォルダ内の相対リンク
+  （`getting-started.md`）が自言語に解決されるので、この種のミスが構造的に起きない（2026-07-06 に移行済み）。
+  nav は言語プレフィックスなしのパス（`index.md` 等）で書き、ja のタイトルは `nav_translations` で対応。
+
+### マニュアル用スクショ撮影の勘所（Windows / 2026-07-06 の実測値）
+- **HDR モニターは画面キャプチャが真っ黒になる**（DXGI/GDI とも）。Win+Alt+B で HDR を一時オフにして撮る。
+- **`GetWindowRect` は Win11 の影（シャドウ）余白を含む**。実枠は `DwmGetWindowAttribute(9)`
+  （EXTENDED_FRAME_BOUNDS）。差分は環境依存（今回の実測: 左8/上0/右8/下8px）なので毎回実測してトリムする。
+- **WebView2（Tauri）ウィンドウは `PrintWindow`（PW_RENDERFULLCONTENT）でも黒くなる**ことがある。
+  画面座標からの `Graphics.CopyFromScreen` が確実（要 HDR オフ・要 Per-Monitor V2 DPI awareness。
+  System-aware だとセカンダリモニターで座標が仮想化されてズレる）。
+- **エクスポート進捗など一瞬の UI は連写で撮る**（300ms 間隔で 80〜150 枚 → 進捗バーの色で機械抽出）。
+- PowerShell 5.1 は **BOM なし UTF-8 の .ps1 を Shift-JIS 誤読**してパースエラーになる。スクリプトは
+  ASCII のみで書く（または BOM 付き UTF-8 で保存する）。
+
+### GitHub Pages: Source を「GitHub Actions」にしないと deploy ジョブが 404/失敗
+- **メモ**: `docs.yml` は actions/deploy-pages 方式。リポジトリの Settings → Pages → Build and deployment →
+  Source を **GitHub Actions** にしておくこと（2026-07-06 設定済み）。gh-pages ブランチ方式ではない。
+  トリガーは main push のうち `docs/**`・`mkdocs.yml`・`docs.yml` 変更時＋手動（workflow_dispatch）。
+
+### Windows: 子プロセスのコンソール窓フラッシュ（dev では再現しない / 2026-07-08）
+- **症状**: 配布版アプリで probe/preview/export など操作のたびにコンソール窓が一瞬出て消える。
+- **原因**: リリースビルドは `windows_subsystem = "windows"` でコンソール非所持。console 系の
+  子プロセス（ffmpeg/ffprobe/tmg1）起動ごとに自前の窓が作られる。`tauri dev` は `cargo run` 親の
+  コンソールを子が継承するので**再現しない**（＝ dev で「出ない」は正常、判定材料にならない）。
+- **回避策**: 子プロセスに `CREATE_NO_WINDOW`(`0x0800_0000`) を `creation_flags` で付与する。
+  `ffmpeg.rs` の `command()` ヘルパー経由で全 `Command::new` を作ること（直書き禁止）。
+- **教訓**: この種の「GUI アプリ特有」挙動は `cargo check`/`tauri dev` では観測不能。**必ず
+  `npm run tauri build` のリリースビルド実機で確認する**。
+
 ## 地雷・禁止事項
 - プレビューとエクスポートでフィルタチェーン構築を分岐させない（WYSIWYG が崩れる。
   修正は `filter.rs` に一本化する）。
+- Windows で子プロセスを起動するときは生の `Command::new` を使わず `ffmpeg.rs` の `command()`
+  ヘルパーを使う（コンソール窓フラッシュ防止。上記参照）。
 - 表示文字列をハードコードしない（i18n。静的は `data-i18n`、動的は `t(key, params)`。言語追加は
   `locales/xx.json` + `i18n.ts` に1行）。
 - TMG1 / コーデックのアルゴリズムを本リポジトリに持ち込まない（責務は `tmg1-codec` / `tmg1-cli`）。
