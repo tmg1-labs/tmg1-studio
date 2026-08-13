@@ -72,6 +72,17 @@
     `DwmGetWindowAttribute(9)`。詳細は下の「スクショ撮影の勘所」）。
 - **後片付け**: 診断が済んだらアプリを終了する（9222 を開けたままにしない）。
 
+### `sync-version.mjs` をローカルで実行すると JSON が全行差分になる（CRLF → LF）
+- **症状**: 版を上げようと `node scripts/sync-version.mjs 0.1.2` を実行すると、`package.json`
+  23行・`tauri.conf.json` 39行が丸ごと差分になる（実質は version 1行のはずなのに）。
+- **原因**: リポジトリの JSON は **CRLF** だが、スクリプトは `JSON.stringify(obj, null, 2) + "\n"`
+  で書き戻すため **LF** になる。`.gitattributes` が無いので正規化もされない。
+  `npm install --package-lock-only` も `package-lock.json` を同様に書き換える（2868行差分になった）。
+- **回避策**: **CI 専用と割り切る**（タグビルドでは commit しないので改行差分は無害）。
+  ローカルで版を上げてコミットするときは、**version 行だけを直接編集**する。対象は
+  `package.json` / `package-lock.json`（root と `packages[""]` の2箇所）/ `src-tauri/tauri.conf.json` /
+  `src-tauri/Cargo.toml`。`Cargo.lock` は `cargo check` で1行だけ更新される（こちらは差分が小さい）。
+
 ### 出力幅が 8 の倍数でない
 - **症状**: monob 出力のバイト境界がずれ、実機表示が崩れる。
 - **原因**: `monob` は 1 バイト = 8 ピクセルで packing するため、幅は 8 の倍数が前提。
