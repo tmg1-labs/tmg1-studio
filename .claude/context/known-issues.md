@@ -29,6 +29,49 @@
 - **メモ（即時反映）**: 呼び出しごとに `ExePaths::load`（store 読込）するので設定変更は再起動不要で次の
   probe/export から効く。store 読込は軽量なので毎回でも問題なし。
 
+### `project-only` の中に置いた要素は「プロジェクト未読込」時に丸ごと消える（2026-08-13 被害あり）
+- **症状**: 新規作成／開く でファイルを選んだ後、**画面が一切変化しない**。エラーも出ない。
+- **原因**: `<p id="status">` が `<footer class="timeline-pane project-only">` の中にあり、
+  `body.no-project .project-only { display:none !important }` で**起動直後（no-project）は
+  ステータスバーごと非表示**だった。`probe_video` が失敗してもエラーは DOM に書かれるだけで、
+  画面に出る場所が存在しなかった（＝「無反応」に見える）。
+- **回避策**: 常時見せたい要素（ステータスバー・警告バー）は `project-only` の**外**に置く。
+  2026-08-13 に `#status` を footer の外へ移し、`#tool-warning` も同じ階層に追加した。
+- **教訓**: 「無反応」を疑ったら、まず **DOM の状態と画面の表示が一致しているか**を確かめる。
+  DOM にエラーが入っているのに画面に出ていなければ、原因は表示側（CSS の可視性）にある。
+
+### 外部ツールの有無チェックは「起動できたか」で見る（終了コード／`--version` に頼らない）
+- **メモ（設計）**: `ffmpeg.rs` の `check_tools()` は各実行ファイルを起動できたかだけを見る。
+  ffmpeg/ffprobe は `-version` で 0 を返すが、**`tmg1` はサブコマンド必須で `--version` を
+  受け付けない**（`error: unexpected argument '--version' found`）ため、終了コードで判定すると
+  「存在するのに無い」と誤判定する。`tmg1` には `--help` を渡している。
+- 呼び出しは起動時と**実行パス設定の変更時**（`persistExePath`）。言語切替では再チェックせず、
+  キャッシュした結果を `renderToolWarning()` で貼り直すだけにする（プロセス再起動を避けるため）。
+
+### アプリは起動した親プロセスの PATH を継承する（PATH を絞ったシェルから起動すると ffprobe 不在）
+- **症状**: 普段は動くのに、ある起動のときだけ `ffprobe を実行できませんでした: program not found`。
+- **原因**: `ffmpeg`/`ffprobe` は winget 管理なら `%LOCALAPPDATA%\Microsoft\WinGet\Links` にあり、
+  これは**ユーザー PATH** の側にある。マシン PATH しか持たない親（サンドボックス化されたシェル等）
+  から起動すると子プロセスが解決できない。Explorer から起動した場合はユーザー PATH を含むので通る。
+- **回避策**: 起動元の環境を疑う。恒久対策としては設定メニューの「実行ファイルのパス」で絶対パスを指定する。
+  2026-08-13 追加の起動時プリフライト警告バーで、この状態は起動直後に画面で分かるようになった。
+
+### Tauri アプリの実機診断は WebView2 の CDP を開けて DOM を直接読む（2026-08-13 に実証）
+- **手法**: 環境変数 `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9222` を
+  セットしてアプリを起動すると、`http://127.0.0.1:9222/json/list` から CDP ターゲットが取れる。
+  WebSocket で `Runtime.evaluate`（`awaitPromise:true`）を投げれば、**リリースビルドでも**
+  `window.__TAURI__.core.invoke(...)` を直接叩けるし、DOM の実状態も読める（`withGlobalTauri: true` 前提）。
+- **勘所**:
+  - 式は**ファイルに書いて渡す**。Git Bash 経由だと引数のバックスラッシュが潰れ、`D:\tmp\...` が
+    `D:<TAB>mp...` になって「ffprobe: Invalid argument」のような**偽の失敗**を作る。
+  - ネイティブのファイルダイアログはクラス `#32770` の別ウィンドウ。`EnumWindows` で見つけて
+    `SetForegroundWindow` → SendKeys でパス入力＋`{ENTER}`（メインウィンドウを AppActivate すると
+    ダイアログからフォーカスが外れて入力が届かない）。
+  - 結果を `window.__diag` 等に残して後からポーリングすると、ユーザー操作待ちで接続を占有しない。
+  - 画面の実描画と DOM の突き合わせには `CopyFromScreen`（HDR は Win+Alt+B でオフ、実枠は
+    `DwmGetWindowAttribute(9)`。詳細は下の「スクショ撮影の勘所」）。
+- **後片付け**: 診断が済んだらアプリを終了する（9222 を開けたままにしない）。
+
 ### 出力幅が 8 の倍数でない
 - **症状**: monob 出力のバイト境界がずれ、実機表示が崩れる。
 - **原因**: `monob` は 1 バイト = 8 ピクセルで packing するため、幅は 8 の倍数が前提。
