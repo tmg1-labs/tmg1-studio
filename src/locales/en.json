@@ -58,6 +58,9 @@
 
   "startHint": "Use \"New\" to load a video, or \"Open\" to open an existing project.",
 
+  "toolsMissing": "{tools} not found. Add it to PATH, or set its full path under Settings → Executable paths.",
+  "toolsMissingTmg1": "tmg1 not found (required for TMG1 export; not needed for RAW only).",
+
   "statusStart": "Start with \"New\" or \"Open\"",
   "probing": "Analyzing with ffprobe…",
   "loaded": "Loaded",

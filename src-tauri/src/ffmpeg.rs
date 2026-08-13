@@ -75,6 +75,35 @@ impl ExePaths {
     }
 }
 
+/// 外部実行ファイルの有無（起動時のプリフライトチェック用）。
+#[derive(Debug, Serialize)]
+pub struct ToolStatus {
+    pub ffmpeg: bool,
+    pub ffprobe: bool,
+    pub tmg1: bool,
+}
+
+/// 各実行ファイルを起動できるかを調べる。
+/// 判定は「起動できたか」だけで、終了コードは見ない
+/// （バージョン表示のフラグがツールごとに違うため。ffmpeg/ffprobe は `-version`、
+/// tmg1 はサブコマンド必須で `--version` を受け付けない）。
+pub fn check_tools(exe: &ExePaths) -> ToolStatus {
+    let spawnable = |program: &str, arg: &str| -> bool {
+        command(program)
+            .arg(arg)
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .is_ok()
+    };
+    ToolStatus {
+        ffmpeg: spawnable(&exe.ffmpeg, "-version"),
+        ffprobe: spawnable(&exe.ffprobe, "-version"),
+        tmg1: spawnable(&exe.tmg1, "--help"),
+    }
+}
+
 /// ffprobe で得た入力動画の情報。
 #[derive(Debug, Serialize)]
 pub struct VideoInfo {

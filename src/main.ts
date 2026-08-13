@@ -35,6 +35,13 @@ interface VideoInfo {
   height: number;
 }
 
+// 外部実行ファイルの有無（起動時プリフライト。false = 起動できなかった）。
+interface ToolStatus {
+  ffmpeg: boolean;
+  ffprobe: boolean;
+  tmg1: boolean;
+}
+
 interface ExportResult {
   raw_path?: string | null;
   tmg1_path?: string | null;
@@ -236,6 +243,7 @@ const timelineEl = $("timeline");
 const scrubEl = $("scrub") as HTMLInputElement;
 const timeReadout = $("time-readout");
 const statusEl = $("status");
+const toolWarningEl = $("tool-warning");
 
 // ---- ユーティリティ ----
 function fmtTime(sec: number): string {
@@ -1728,6 +1736,7 @@ function refreshDynamicUi() {
   updateSaveLabel();
   updatePlayButtonLabel();
   updateFileInfo();
+  renderToolWarning();
   if (state.inputPath) {
     renderTimeline();
     syncParamInputs();
@@ -1779,6 +1788,7 @@ async function persistExePath(key: string, value: string) {
   if (!settingsStore) return;
   await settingsStore.set(key, value.trim());
   await settingsStore.save();
+  await refreshToolCheck(); // 変更したパスで実際に起動できるかをその場で確かめる
 }
 
 // 入力欄の値をストアへ保存（change で確定。空欄可）。
@@ -1821,6 +1831,34 @@ async function initExePaths() {
   }
 }
 
+// ---- 外部ツールのプリフライトチェック ----
+// probe / preview / export は ffmpeg・ffprobe が無いと必ず失敗するので、
+// 起動時と実行パス変更時に有無を確かめて、欠けていれば警告バーに出す。
+let toolStatus: ToolStatus | null = null;
+
+// 直近のチェック結果から警告文を組み立てる（言語切替時にも呼ぶので再チェックはしない）。
+function renderToolWarning() {
+  const msgs: string[] = [];
+  if (toolStatus) {
+    const missing: string[] = [];
+    if (!toolStatus.ffmpeg) missing.push("ffmpeg");
+    if (!toolStatus.ffprobe) missing.push("ffprobe");
+    if (missing.length) msgs.push(t("toolsMissing", { tools: missing.join(" / ") }));
+    if (!toolStatus.tmg1) msgs.push(t("toolsMissingTmg1"));
+  }
+  toolWarningEl.textContent = msgs.join("　");
+  toolWarningEl.hidden = msgs.length === 0;
+}
+
+async function refreshToolCheck() {
+  try {
+    toolStatus = await invoke<ToolStatus>("check_tools");
+  } catch {
+    toolStatus = null; // チェック自体が失敗しても操作は妨げない（警告は出さない）
+  }
+  renderToolWarning();
+}
+
 // ---- 初期化 ----
 newBtn.addEventListener("click", openVideo);
 loadBtn.addEventListener("click", loadProject);
@@ -1830,3 +1868,5 @@ initLocale();
 initExePaths();
 initPresets();
 initEncodePresets();
+// 言語適用より先に解決しても、changeLocale → refreshDynamicUi で文言は貼り直される。
+refreshToolCheck();
