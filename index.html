@@ -159,8 +159,13 @@
       </div>
       <div id="timeline" class="timeline"></div>
       <input id="scrub" class="scrub" type="range" min="0" max="1000" step="1" value="0" disabled />
-      <p id="status" class="status"></p>
     </footer>
+
+    <!-- ツール不足の警告とステータスバーは project-only の外に置く。
+         footer の中に入れるとプロジェクト未読み込み時に display:none で消え、
+         probe 失敗などのエラーが画面に一切出なくなるため。 -->
+    <p id="tool-warning" class="tool-warning" hidden></p>
+    <p id="status" class="status"></p>
 
     <div id="export-modal" class="modal-overlay" hidden>
       <div class="modal wide">

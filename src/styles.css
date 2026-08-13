@@ -674,15 +674,36 @@ button:disabled {
   cursor: not-allowed;
 }
 
+/* ステータスバー: プロジェクトの有無に関わらず常時表示（timeline-pane の外に置く）。 */
 .status {
-  margin: 0.4rem 0 0;
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 0.35rem 0.9rem;
+  background: var(--panel);
+  border-top: 1px solid var(--line);
   font-size: 0.78rem;
   color: var(--muted);
-  min-height: 1.1em;
+  min-height: 1.8em;
 }
 
 .status.error {
   color: #ff8088;
+}
+
+/* 外部ツール（ffmpeg/ffprobe/tmg1）不足の警告バー。起動時のプリフライトで出す。 */
+.tool-warning {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 0.4rem 0.9rem;
+  background: rgba(255, 128, 136, 0.12);
+  border-top: 1px solid var(--line);
+  color: #ff8088;
+  font-size: 0.78rem;
+}
+
+/* display を持つ要素は [hidden] を明示しないと JS の hidden で消えない。 */
+.tool-warning[hidden] {
+  display: none;
 }
 
 /* ---- 確認モーダル ---- */

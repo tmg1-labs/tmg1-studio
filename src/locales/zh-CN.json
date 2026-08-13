@@ -58,6 +58,9 @@
 
   "startHint": "使用“新建”加载视频，或用“打开”打开已有项目。",
 
+  "toolsMissing": "找不到 {tools}。请将其加入 PATH，或在设置的“可执行文件路径”中指定完整路径。",
+  "toolsMissingTmg1": "找不到 tmg1（导出 TMG1 格式时需要；仅导出 RAW 则不需要）。",
+
   "statusStart": "请从“新建”或“打开”开始",
   "probing": "正在用 ffprobe 分析…",
   "loaded": "加载完成",

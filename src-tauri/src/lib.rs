@@ -3,7 +3,7 @@ mod filter;
 
 use base64::{engine::general_purpose::STANDARD, Engine};
 
-use ffmpeg::{ExePaths, ExportFormat, ExportResult, Project, VideoInfo};
+use ffmpeg::{ExePaths, ExportFormat, ExportResult, Project, ToolStatus, VideoInfo};
 use filter::Segment;
 
 /// 入力動画の情報を取得する。
@@ -15,6 +15,18 @@ async fn probe_video(app: tauri::AppHandle, path: String) -> Result<VideoInfo, S
     })
     .await
     .map_err(|e| format!("タスク実行失敗: {e}"))?
+}
+
+/// 外部実行ファイル（ffmpeg / ffprobe / tmg1）の有無を返す。
+/// 起動時と実行パス設定の変更時にフロントから呼び、欠けていれば警告表示に使う。
+#[tauri::command]
+async fn check_tools(app: tauri::AppHandle) -> Result<ToolStatus, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let exe = ExePaths::load(&app);
+        ffmpeg::check_tools(&exe)
+    })
+    .await
+    .map_err(|e| format!("タスク実行失敗: {e}"))
 }
 
 /// 指定時刻のプレビューフレームを PNG data URL 文字列で返す。
@@ -90,6 +102,7 @@ pub fn run() {
         .plugin(tauri_plugin_store::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             probe_video,
+            check_tools,
             render_preview,
             render_range,
             export,
