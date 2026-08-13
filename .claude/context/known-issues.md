@@ -203,6 +203,15 @@
   `sync-version.mjs` は `^\d+\.\d+\.\d+` を通すため接尾辞自体は素通しする＝ガードにならない点に注意。
   検証後は `gh release delete <tag> --cleanup-tag --yes`（Release＋リモートタグを一括削除）＋ローカル `git tag -d`。
 
+### リリース CI: `releaseBody` に固定文を書くと毎回のリリースに同じ本文が入る（2026-08-13 被害あり）
+- **症状**: v0.1.2 のドラフト Release のノートが **v0.1.1 と全く同じ**（今回の変更点が一切書かれていない）。
+- **原因**: `release.yml` の `tauri-action` に `releaseBody` を**固定文字列**で持たせていたため
+  （commit `37eb837` で v0.1.1 のリネーム告知として追加したもの）。タグを切るたび同じ本文が入る。
+- **対処**: `releaseBody` を撤去した（2026-08-13）。以後リリースノートは**ドラフト作成後に手で書く**。
+  `gh release edit <tag> --notes-file <file>` が確実（本文に日本語や改行が多いのでファイル渡し）。
+- **メモ**: ドラフト Release の URL は `.../releases/tag/untagged-<hash>` になる（公開までタグに
+  紐づかないため）。`gh release view <tag>` では通常どおり参照できる。
+
 ### リリース CI: tauri-action はマトリクス各脚が同一 tagName のドラフトを共有して添付
 - **メモ（設計）**: `release.yml` は 3 プラットフォームを 1 ジョブのマトリクスで回し、各脚が
   `tauri-apps/tauri-action@v0` を同一 `tagName` で呼ぶ。tauri-action は既存の（ドラフト）Release を
