@@ -48,13 +48,37 @@
 - 呼び出しは起動時と**実行パス設定の変更時**（`persistExePath`）。言語切替では再チェックせず、
   キャッシュした結果を `renderToolWarning()` で貼り直すだけにする（プロセス再起動を避けるため）。
 
-### アプリは起動した親プロセスの PATH を継承する（PATH を絞ったシェルから起動すると ffprobe 不在）
-- **症状**: 普段は動くのに、ある起動のときだけ `ffprobe を実行できませんでした: program not found`。
-- **原因**: `ffmpeg`/`ffprobe` は winget 管理なら `%LOCALAPPDATA%\Microsoft\WinGet\Links` にあり、
-  これは**ユーザー PATH** の側にある。マシン PATH しか持たない親（サンドボックス化されたシェル等）
-  から起動すると子プロセスが解決できない。Explorer から起動した場合はユーザー PATH を含むので通る。
-- **回避策**: 起動元の環境を疑う。恒久対策としては設定メニューの「実行ファイルのパス」で絶対パスを指定する。
-  2026-08-13 追加の起動時プリフライト警告バーで、この状態は起動直後に画面で分かるようになった。
+### アプリは起動元プロセスの環境を継承する ＝ Explorer が壊れていると全部の起動が壊れる（2026-08-13 実証）
+> **これが「ファイル選択後に無反応」事件の実因**。当初は特定できず「一過性の環境要因」としていたが、
+> 後日 v0.1.2 の警告バーが同じ状態を捕まえ、実行中プロセスの PATH 実測で確定した。
+
+- **症状**: **ターミナルでは `ffmpeg`/`ffprobe`/`tmg1` が普通に動くのに、アプリだけ「見つかりません」**。
+- **原因**: 子プロセスは親の環境ブロックを丸ごと継承する。`ffmpeg`/`ffprobe`（winget の
+  `%LOCALAPPDATA%\Microsoft\WinGet\Links`）も `tmg1`（`~/.cargo/bin`）も**ユーザー PATH 側**にあるため、
+  マシン PATH しか持たない親から起動されたアプリは 3 つとも解決できない。
+  実測値（2026-08-13）: 正常な起動は **PATH 3410 文字 / 84 エントリ**、壊れた起動は **1938 文字 / 52
+  エントリ**（＝マシン PATH のみ）。
+- **今回の連鎖**: `explorer.exe`(PID 1956) が **12:51 にマシン PATH だけの環境で再起動**されていた
+  → そこから起動した Chrome(12:52) が継承 → Chrome でダウンロードしたインストーラが継承 →
+  **インストーラの完了画面から起動されたアプリ**が継承。`__COMPAT_LAYER=DetectorsAppHealth` と
+  PATH 先頭の Chrome ディレクトリが起動チェーンの痕跡として残る。
+  ※ Explorer がなぜ壊れた環境で再起動されたかは**不明**（同時刻に winget のログはあるが断定できない）。
+- **落とし穴（実際に誤診した）**: **「スタートメニューから起動すれば直る」は誤り**。
+  スタートメニュー・タスクバー・デスクトップはすべて Explorer の子なので、同じ壊れた環境を継承する。
+  一方 `Start-Process explorer.exe "<exe パス>"` は**新しい explorer プロセスが環境を作り直す**ため
+  通ってしまい、「Explorer 起動なら大丈夫」と誤った結論を出しやすい。**判定は必ずプロセスの PATH を実測する**。
+- **対処**:
+  1. **設定メニューの「実行ファイルのパス」に絶対パスを入れる**（起動元の環境に一切依存しなくなる。
+     推奨）。winget のものは `WinGet\Links\ffmpeg.exe` を指すこと。実体の
+     `WinGet\Packages\...\ffmpeg-9.0-full_build\bin\` を直指しするとアップグレードで壊れる。
+  2. **サインアウト→サインイン（または再起動）**で Explorer を正しい環境で起動し直す（根本対処。
+     Chrome など他アプリの子プロセスも一括で正常化する）。
+- **診断手順（実行中プロセスの PATH を読む）**: PEB 経由で他プロセスの環境ブロックを読む。
+  `OpenProcess(QUERY_INFORMATION|VM_READ)` → `NtQueryInformationProcess`(cls 0) で PEB →
+  x64 では `PEB+0x20` = ProcessParameters、`+0x80` = Environment ポインタ、`+0x3F0` = EnvironmentSize。
+  UTF-16 の `NAME=VALUE\0...` を読んで `Path=` を拾う。あわせて `Get-CimInstance Win32_Process` の
+  `ParentProcessId` / `CreationDate` を見ると**起動チェーンと時刻**が分かり、原因追跡が一気に進む。
+- **予防**: 2026-08-13 の起動時プリフライト警告バー（v0.1.2〜）で、この状態は起動直後に画面で分かる。
 
 ### Tauri アプリの実機診断は WebView2 の CDP を開けて DOM を直接読む（2026-08-13 に実証）
 - **手法**: 環境変数 `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9222` を
